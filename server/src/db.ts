@@ -111,10 +111,65 @@ CREATE TABLE IF NOT EXISTS reactions (
 );
 `;
 
+const SCHEMA_V2 = `
+CREATE TABLE IF NOT EXISTS uploads (
+  id         TEXT PRIMARY KEY,
+  owner_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  file       TEXT NOT NULL,     -- file name on disk
+  mime       TEXT NOT NULL,
+  name       TEXT NOT NULL,     -- original file name
+  size       INTEGER NOT NULL,
+  width      INTEGER,
+  height     INTEGER,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gif_favorites (
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  url        TEXT NOT NULL,
+  preview    TEXT NOT NULL,
+  width      INTEGER,
+  height     INTEGER,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, url)
+);
+
+CREATE TABLE IF NOT EXISTS user_stickers (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  url        TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+-- Community-shared appearance themes, like a theme store.
+CREATE TABLE IF NOT EXISTS themes (
+  id          TEXT PRIMARY KEY,
+  author_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  data        TEXT NOT NULL,   -- JSON appearance settings, including any custom CSS
+  installs    INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL
+);
+`;
+
+/** Add a column if an older database does not have it yet. */
+function addColumn(db: DB, table: string, column: string, definition: string) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
 export function openDb(path: string): DB {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  db.exec(SCHEMA_V2);
+  addColumn(db, 'users', 'prefs', "TEXT NOT NULL DEFAULT '{}'");
+  addColumn(db, 'users', 'avatar_url', 'TEXT');
+  addColumn(db, 'users', 'banner_url', 'TEXT');
+  addColumn(db, 'messages', 'attachments', "TEXT NOT NULL DEFAULT '[]'");
+  addColumn(db, 'messages', 'sticker', 'TEXT');
   return db;
 }
 

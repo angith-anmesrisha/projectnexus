@@ -2,13 +2,16 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { io as connect, type Socket } from 'socket.io-client';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createNexus } from '../src/app.ts';
 
 let nexus: ReturnType<typeof createNexus>;
 let base: string;
 
 before(async () => {
-  nexus = createNexus({ dbPath: ':memory:' });
+  nexus = createNexus({ dbPath: ':memory:', uploadDir: mkdtempSync(join(tmpdir(), 'nexus-uploads-')) });
   await new Promise<void>((resolve) => nexus.server.listen(0, resolve));
   base = `http://localhost:${(nexus.server.address() as AddressInfo).port}`;
 });
@@ -24,6 +27,15 @@ class Client {
   username: string;
   constructor(username: string) {
     this.username = username;
+  }
+
+  async upload(bytes: Buffer, name: string) {
+    const res = await fetch(`${base}/api/uploads?name=${encodeURIComponent(name)}&w=10&h=10`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream', cookie: this.cookie },
+      body: bytes,
+    });
+    return { status: res.status, body: (await res.json()) as any };
   }
 
   async call(method: string, path: string, body?: unknown) {
@@ -211,6 +223,67 @@ describe('communities', () => {
     await owner.call('DELETE', `/api/communities/${community.id}/members/${member.id}`);
     const general = community.channels.find((c: any) => c.name === 'general');
     assert.equal((await member.call('GET', `/api/channels/${general.id}/messages`)).status, 404);
+  });
+});
+
+describe('media, stickers and appearance', () => {
+  // Smallest valid GIF header plus padding is enough for type sniffing.
+  const gif = Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(32)]);
+
+  test('uploads are sniffed and can be attached by their owner only', async () => {
+    const a = await new Client('uploader').register();
+    const b = await new Client('thief').register();
+    const community = (await a.call('POST', '/api/communities', { name: 'Media' })).body.community;
+    await b.call('POST', `/api/communities/${community.id}/join`);
+    const general = community.channels.find((c: any) => c.name === 'general');
+
+    const up = await a.upload(gif, 'party.gif');
+    assert.equal(up.status, 201);
+    assert.equal(up.body.attachment.kind, 'gif');
+    const fetched = await fetch(base + up.body.attachment.url);
+    assert.equal(fetched.headers.get('content-type'), 'image/gif');
+
+    // A script disguised as an image is stored as an opaque download.
+    const evil = await a.upload(Buffer.from('<script>alert(1)</script>'), 'cat.png');
+    assert.equal(evil.body.attachment.kind, 'file');
+    assert.match(evil.body.attachment.url, /\.bin$/);
+
+    const sent = await a.call('POST', `/api/channels/${general.id}/messages`, { attachments: [{ uploadId: up.body.id }] });
+    assert.equal(sent.status, 201);
+    assert.equal(sent.body.message.attachments[0].kind, 'gif');
+    assert.equal((await b.call('POST', `/api/channels/${general.id}/messages`, { attachments: [{ uploadId: up.body.id }] })).status, 400);
+
+    // GIFs from search providers are fine; arbitrary hosts are not.
+    assert.equal((await a.call('POST', `/api/channels/${general.id}/messages`, { attachments: [{ gifUrl: 'https://media.giphy.com/media/abc/giphy.gif' }] })).status, 201);
+    assert.equal((await a.call('POST', `/api/channels/${general.id}/messages`, { attachments: [{ gifUrl: 'https://evil.example/track.gif' }] })).status, 400);
+    assert.equal((await a.call('POST', `/api/channels/${general.id}/messages`, {})).status, 400);
+  });
+
+  test('stickers: built-in and personal', async () => {
+    const a = await new Client('stickerer').register();
+    const community = (await a.call('POST', '/api/communities', { name: 'Stickers' })).body.community;
+    const general = community.channels.find((c: any) => c.name === 'general');
+    const builtin = await a.call('POST', `/api/channels/${general.id}/messages`, { sticker: { id: 'nexus:gg' } });
+    assert.equal(builtin.body.message.sticker.id, 'nexus:gg');
+    assert.equal((await a.call('POST', `/api/channels/${general.id}/messages`, { sticker: { id: 'nexus:nope' } })).status, 400);
+
+    const up = await a.upload(gif, 'me.gif');
+    const sticker = (await a.call('POST', '/api/stickers', { name: 'Me', uploadId: up.body.id })).body.sticker;
+    const custom = await a.call('POST', `/api/channels/${general.id}/messages`, { sticker: { id: `custom:${sticker.id}` } });
+    assert.equal(custom.body.message.sticker.url, sticker.url);
+  });
+
+  test('appearance prefs sync and the theme gallery', async () => {
+    const a = await new Client('themer').register();
+    const b = await new Client('installer').register();
+    await a.call('PUT', '/api/users/me/prefs', { prefs: { theme: 'synthwave', customCss: '.x{}' } });
+    assert.deepEqual((await a.call('GET', '/api/users/me/prefs')).body.prefs, { theme: 'synthwave', customCss: '.x{}' });
+    assert.equal((await a.call('PUT', '/api/users/me/prefs', { prefs: { customCss: 'x'.repeat(70_000) } })).status, 400);
+
+    const theme = (await a.call('POST', '/api/themes', { name: 'Neon Dusk', data: { theme: 'synthwave' } })).body.theme;
+    assert.equal((await b.call('POST', `/api/themes/${theme.id}/install`)).body.theme.installs, 1);
+    assert.equal((await b.call('GET', '/api/themes')).body.themes[0].name, 'Neon Dusk');
+    assert.equal((await b.call('DELETE', `/api/themes/${theme.id}`)).status, 403);
   });
 });
 

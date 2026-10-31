@@ -15,10 +15,12 @@ import {
 import { tx } from '../db.ts';
 import { HttpError, badRequest, forbidden, notFound, str } from '../http.ts';
 import type { Realtime } from '../realtime.ts';
-import { getMessageRow, serializeConversation, serializeMessages, type MessageRow } from '../serialize.ts';
+import { getMessageRow, serializeConversation, serializeMessages, type Attachment, type MessageRow } from '../serialize.ts';
+import { BUILTIN_STICKERS, attachmentFromUpload, isAllowedGifUrl, type UploadRow } from './media.ts';
 
 const MAX_MESSAGE = 2000;
 const MAX_GROUP = 10;
+const MAX_ATTACHMENTS = 10;
 // Keep reactions to a single emoji grapheme or a short :shortcode:.
 const EMOJI = /^(\p{Extended_Pictographic}(️|‍|\p{Extended_Pictographic}|\p{Emoji_Modifier})*|:[a-z0-9_]{1,32}:)$/u;
 
@@ -46,6 +48,42 @@ export function messageRoutes(rt: Realtime) {
       .prepare('SELECT emoji, user_id FROM reactions WHERE message_id = ?')
       .all(messageId) as { emoji: string; user_id: string }[];
     rt.toChannel(channel.id, event, { ...msg, reactors });
+  }
+
+  /** Uploads must belong to the sender; GIFs may also come from the search providers. */
+  function parseAttachments(userId: string, raw: unknown): Attachment[] {
+    if (raw === undefined || raw === null) return [];
+    if (!Array.isArray(raw)) throw badRequest('attachments must be a list');
+    if (raw.length > MAX_ATTACHMENTS) throw badRequest(`Up to ${MAX_ATTACHMENTS} attachments per message`);
+    return raw.map((a: any): Attachment => {
+      if (typeof a?.uploadId === 'string') {
+        const upload = db.prepare('SELECT * FROM uploads WHERE id = ? AND owner_id = ?').get(a.uploadId, userId) as
+          | UploadRow
+          | undefined;
+        if (!upload) throw badRequest('Attachment not found');
+        return attachmentFromUpload(upload);
+      }
+      if (typeof a?.gifUrl === 'string' && isAllowedGifUrl(a.gifUrl)) {
+        const dim = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.min(Math.round(Number(v)), 4000) : null);
+        return { kind: 'gif', url: a.gifUrl, name: 'GIF', mime: 'image/gif', size: null, width: dim(a.width), height: dim(a.height) };
+      }
+      throw badRequest('Unsupported attachment');
+    });
+  }
+
+  /** Stickers are stored as JSON: built-in ones by id, personal ones with their image. */
+  function parseSticker(userId: string, raw: unknown): string | null {
+    if (raw === undefined || raw === null) return null;
+    const id = (raw as { id?: unknown })?.id;
+    if (typeof id !== 'string') throw badRequest('Invalid sticker');
+    if (id.startsWith('nexus:') && BUILTIN_STICKERS.includes(id.slice(6))) return JSON.stringify({ id });
+    if (id.startsWith('custom:')) {
+      const s = db.prepare('SELECT id, name, url FROM user_stickers WHERE id = ? AND user_id = ?').get(id.slice(7), userId) as
+        | { id: string; name: string; url: string }
+        | undefined;
+      if (s) return JSON.stringify({ id, name: s.name, url: s.url });
+    }
+    throw badRequest('Unknown sticker');
   }
 
   /** A message the viewer can see, plus its channel. */
@@ -91,7 +129,10 @@ export function messageRoutes(rt: Realtime) {
     const userId = me(req);
     const channel = readableChannel(db, userId, req.params.id);
     assertCanPost(db, userId, channel);
-    const content = str(req.body, 'content', { min: 1, max: MAX_MESSAGE })!;
+    const content = str(req.body, 'content', { max: MAX_MESSAGE, optional: true }) ?? '';
+    const attachments = parseAttachments(userId, req.body?.attachments);
+    const sticker = parseSticker(userId, req.body?.sticker);
+    if (!content && attachments.length === 0 && !sticker) throw badRequest('Message is empty');
     let replyTo: number | null = null;
     if (req.body?.replyToId !== undefined && req.body.replyToId !== null) {
       const target = getMessageRow(db, Number(req.body.replyToId));
@@ -101,8 +142,10 @@ export function messageRoutes(rt: Realtime) {
     throttle(userId);
 
     const result = db
-      .prepare('INSERT INTO messages (channel_id, author_id, content, reply_to_id, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(channel.id, userId, content, replyTo, Date.now());
+      .prepare(
+        'INSERT INTO messages (channel_id, author_id, content, reply_to_id, attachments, sticker, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(channel.id, userId, content, replyTo, JSON.stringify(attachments), sticker, Date.now());
     const id = Number(result.lastInsertRowid);
     emitMessage('message:new', channel, id);
     const [message] = serializeMessages(rt.ctx, userId, [getMessageRow(db, id)!]);
@@ -113,7 +156,8 @@ export function messageRoutes(rt: Realtime) {
     const userId = me(req);
     const { row, channel } = visibleMessage(userId, req.params.id);
     if (row.author_id !== userId) throw forbidden('You can only edit your own messages');
-    const content = str(req.body, 'content', { min: 1, max: MAX_MESSAGE })!;
+    const hasMedia = row.sticker !== null || row.attachments !== '[]';
+    const content = str(req.body, 'content', { min: hasMedia ? 0 : 1, max: MAX_MESSAGE })!;
     db.prepare('UPDATE messages SET content = ?, edited_at = ? WHERE id = ?').run(content, Date.now(), row.id);
     emitMessage('message:update', channel, row.id);
     res.json({ message: serializeMessages(rt.ctx, userId, [getMessageRow(db, row.id)!])[0] });

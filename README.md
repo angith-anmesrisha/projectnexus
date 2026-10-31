@@ -6,10 +6,14 @@ Nexus brings together three experiences: **Connect** (friends, messaging, commun
 
 ## What works today
 
+**Landing page and sign-up**
+- Animated landing page (aurora wallpaper, parallax preview cards, rotating headline, live theme carousel, sticker marquee)
+- Three-step sign-up: account, the games you play, and a theme that applies live before you even land in the app
+
 **Accounts and profiles**
 - Sign up and sign in with username and password (scrypt hashes, httpOnly session cookies, login throttling)
 - Pick your games during sign-up
-- Profile with display name, bio, accent colour, "now playing", favourite games and a "looking for teammates" flag
+- Profile with avatar and banner uploads, display name, bio, name colour, "now playing", favourite games and a "looking for teammates" flag
 - Status: online, idle, do not disturb, or invisible (appear offline to everyone)
 
 **Friends and safety**
@@ -23,6 +27,24 @@ Nexus brings together three experiences: **Connect** (friends, messaging, commun
 - Real-time delivery over WebSockets
 - Replies, reactions, editing, deleting, pinned messages, typing indicators
 - @mention highlighting, clickable links, unread markers, history paging
+- Emoji picker (full Unicode set, search, skin tones, recents), `:shortcode:` autocomplete and jumbo emoji-only messages
+- GIF picker with saved GIFs and GIF upload; live GIPHY or Tenor search when the server has an API key
+- 16 built-in Nexus stickers, plus your own custom stickers made from any image
+- Image, video and file attachments (drag and drop, paste, up to 10 MB each) with a lightbox
+- Markdown: bold, italic, underline, strike, code blocks, quotes, spoilers
+- Per-chat search, pinned messages panel, member panel, day dividers and jump to latest
+- Ctrl+K quick switcher for friends, chats, communities and channels
+
+**Customisation Studio** (Ctrl+,)
+- Nine themes, plus full control over accent colours, background, panels, text, light or dark mode
+- Wallpapers (aurora, neon grid, mesh, solid or your own image), dimming, panel opacity and glass blur
+- Layout: dock position, density, corner radius, chat width, animation level
+- Typography: nine fonts and text scale
+- Chat style: bubbles, flat or cards
+- 14 plugins you can switch on or off (markdown, spoilers, big emoji, focus mode, streamer mode, 24h clock, sounds, confetti and more)
+- Custom CSS editor with live apply, snippets and a list of variables and classes
+- Theme gallery: publish your look, install other people's themes
+- Import, export and reset; everything syncs to your account across devices
 
 **Communities**
 - Create a community (comes with announcements, general, looking-for-group and clips channels)
@@ -41,7 +63,7 @@ Every permission is enforced on the server. Private channels answer 404 to non-m
 
 | Part | Tech |
 | --- | --- |
-| Client | React 19, React Router, Vite, plain CSS with design tokens |
+| Client | React 19, React Router, Vite, lucide icons, plain CSS driven by theme variables |
 | Server | Node.js 22 (runs TypeScript directly), Express 5, Socket.IO |
 | Database | SQLite through Node's built-in `node:sqlite` (no native modules) |
 
@@ -65,7 +87,7 @@ npm run build      # build the client into client/dist
 npm start          # serve the API and the built client on port 3001
 ```
 
-Environment variables for the server: `PORT` (default 3001), `DATABASE_PATH` (default `server/nexus.db`), and `NODE_ENV=production` to mark cookies `Secure`.
+Environment variables for the server: `PORT` (default 3001), `DATABASE_PATH` (default `server/nexus.db`), `UPLOAD_DIR` (default `server/uploads`), `GIPHY_API_KEY` or `TENOR_API_KEY` to turn on live GIF search, and `NODE_ENV=production` to mark cookies `Secure`.
 
 ## Layout
 
@@ -89,8 +111,7 @@ client/
 
 ## Next up
 
-- Attachments and message search
-- Notifications and per-community notification settings
+- Global message search, notifications inbox and per-community notification settings
 - Voice rooms, calls and screen sharing (WebRTC)
 - Forums, events and custom roles and permissions
 - Discover feed with clips and permitted video embeds

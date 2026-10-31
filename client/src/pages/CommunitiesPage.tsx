@@ -1,25 +1,35 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, NavLink, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { CalendarDays, Compass, DoorOpen, Hash, Link2, Megaphone, MessageSquareText, Plus, Settings, Trophy, UserPlus, Volume2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useNexus } from '../lib/store';
 import type { Channel, Community } from '../lib/types';
 import { CommunityBadge } from '../components/Avatar';
 import { ChatView } from '../components/ChatView';
-import { Icon } from '../components/Icon';
 import { Modal } from '../components/Modal';
 import { MemberRow } from './MessagesPage';
 
-const ACCENTS = ['#22d3ee', '#7c5cff', '#f43f5e', '#f59e0b', '#10b981', '#ec4899', '#3b82f6'];
+const ACCENTS = ['#8b5cf6', '#22d3ee', '#f43f5e', '#f59e0b', '#10b981', '#ec4899', '#3b82f6', '#a3ff12'];
+
+type ModalKind = 'create' | 'join' | 'channel' | 'invite' | 'settings' | null;
 
 export function CommunitiesPage() {
   const { communityId, channelId } = useParams();
+  const [params, setParams] = useSearchParams();
   const { communities, communityDetails, setCommunityDetail } = useNexus();
   const [error, setError] = useState('');
-  const [modal, setModal] = useState<'create' | 'join' | 'channel' | 'invite' | 'settings' | null>(null);
+  const [modal, setModal] = useState<ModalKind>(params.get('new') ? 'create' : null);
   const navigate = useNavigate();
 
   const community = communityId ? communityDetails[communityId] : undefined;
   const inList = communities.some((c) => c.id === communityId);
+
+  useEffect(() => {
+    if (params.get('new')) {
+      setModal('create');
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
 
   useEffect(() => {
     if (!communityId) return;
@@ -30,7 +40,6 @@ export function CommunitiesPage() {
       .catch((e) => setError(e.message));
   }, [communityId, setCommunityDetail]);
 
-  // Removed from (or deleted) the community we are looking at.
   useEffect(() => {
     if (communityId && community && !inList) navigate('/communities', { replace: true });
   }, [communityId, community, inList, navigate]);
@@ -39,80 +48,76 @@ export function CommunitiesPage() {
     const first = community.channels.find((c) => c.kind === 'text') ?? community.channels[0];
     return <Navigate to={`/communities/${community.id}/${first.id}`} replace />;
   }
-
   const channel = community?.channels.find((c) => c.id === channelId);
-  // The channel was deleted while we were looking at it.
   if (community && channelId && !channel) return <Navigate to={`/communities/${community.id}`} replace />;
   const isMod = community?.role === 'owner' || community?.role === 'admin';
 
-  return (
-    <div className="split">
-      <aside className="sidebar">
-        {community ? (
-          <CommunitySidebar community={community} isMod={isMod} onModal={setModal} />
-        ) : (
-          <>
-            <div className="sidebar-head">
-              <h2>Communities</h2>
-            </div>
-            <div className="side-list">
-              {communities.map((c) => (
-                <NavLink key={c.id} to={`/communities/${c.id}`} className="side-link convo">
-                  <CommunityBadge name={c.name} accent={c.accent} size={34} />
-                  <span className="convo-text">
-                    <span className="convo-name">{c.name}</span>
-                    <span className="convo-sub">{c.game || `${c.memberCount} members`}</span>
-                  </span>
-                </NavLink>
-              ))}
-            </div>
-            <div className="sidebar-foot">
-              <button className="btn btn-primary btn-block" onClick={() => setModal('create')}>
-                <Icon name="plus" size={16} /> Create community
-              </button>
-              <button className="btn btn-ghost btn-block" onClick={() => setModal('join')}>
-                <Icon name="link" size={16} /> Join with invite
-              </button>
-            </div>
-          </>
-        )}
-      </aside>
-
-      {community && channel ? (
-        <ChatView
-          key={channel.id}
-          channel={channel}
-          title={channel.name}
-          icon={<Icon name={channel.kind === 'announcement' ? 'megaphone' : 'hash'} />}
-          topic={channel.topic}
-          readOnlyReason={channel.kind === 'announcement' && !isMod ? 'Only admins can post in announcement channels.' : undefined}
-          canModerate={isMod}
-          canPin={isMod}
-          aside={<MemberList community={community} />}
-        />
-      ) : communityId && error ? (
-        <div className="empty-state">
-          <p className="muted">{error}</p>
-          <Link to="/communities" className="btn">All communities</Link>
-        </div>
-      ) : communityId ? (
-        <div className="empty-state"><p className="muted">Loading…</p></div>
-      ) : (
-        <CommunitiesLanding onCreate={() => setModal('create')} onJoin={() => setModal('join')} />
-      )}
-
-      {modal === 'create' && <CreateCommunityModal onClose={() => setModal(null)} />}
+  const modals = (
+    <>
+      {modal === 'create' && <CreateCommunityModal onClose={() => setModal(null)} onJoin={() => setModal('join')} />}
       {modal === 'join' && <JoinModal onClose={() => setModal(null)} />}
       {modal === 'channel' && community && <CreateChannelModal community={community} onClose={() => setModal(null)} />}
       {modal === 'invite' && community && <InviteModal community={community} onClose={() => setModal(null)} />}
       {modal === 'settings' && community && <CommunitySettingsModal community={community} onClose={() => setModal(null)} />}
+    </>
+  );
+
+  if (!communityId) {
+    return (
+      <div className="workspace single">
+        <section className="main glass">
+          <CommunitiesLanding onCreate={() => setModal('create')} onJoin={() => setModal('join')} />
+        </section>
+        {modals}
+      </div>
+    );
+  }
+
+  return (
+    <div className="workspace has-chat">
+      <aside className="context glass">
+        {community ? <CommunitySidebar community={community} isMod={isMod} onModal={setModal} /> : <p className="muted pad">{error || 'Loading…'}</p>}
+      </aside>
+      <section className="main glass">
+        {community && channel ? (
+          <ChatView
+            key={channel.id}
+            kind="channel"
+            channel={channel}
+            title={channel.name}
+            icon={channel.kind === 'announcement' ? <Megaphone size={20} /> : <Hash size={20} />}
+            topic={channel.topic}
+            lockedReason={channel.kind === 'announcement' && !isMod ? 'Only admins can post announcements here.' : undefined}
+            canModerate={isMod}
+            canPin={isMod}
+            members={community.members}
+            intro={
+              <div className="intro">
+                <span className="intro-icon">{channel.kind === 'announcement' ? <Megaphone size={34} /> : <Hash size={34} />}</span>
+                <h2>Welcome to #{channel.name}</h2>
+                <p className="muted">{channel.topic || `This is the start of #${channel.name} in ${community.name}.`}</p>
+              </div>
+            }
+            aside={<MemberList community={community} />}
+          />
+        ) : error ? (
+          <div className="empty">
+            <p className="muted">{error}</p>
+            <Link to="/communities" className="btn">All communities</Link>
+          </div>
+        ) : (
+          <div className="empty"><p className="muted">Loading…</p></div>
+        )}
+      </section>
+      {modals}
     </div>
   );
 }
 
-function CommunitySidebar({ community, isMod, onModal }: { community: Community; isMod: boolean; onModal: (m: 'channel' | 'invite' | 'settings') => void }) {
+function CommunitySidebar({ community, isMod, onModal }: { community: Community; isMod: boolean; onModal: (m: ModalKind) => void }) {
   const { unread, removeCommunity } = useNexus();
   const navigate = useNavigate();
+  const online = community.members.filter((m) => m.presence !== 'offline').length;
 
   async function leave() {
     if (!window.confirm(`Leave ${community.name}?`)) return;
@@ -121,59 +126,57 @@ function CommunitySidebar({ community, isMod, onModal }: { community: Community;
     navigate('/communities');
   }
 
-  const announcements = community.channels.filter((c) => c.kind === 'announcement');
-  const text = community.channels.filter((c) => c.kind === 'text');
-
-  const channelLink = (c: Channel) => (
-    <NavLink key={c.id} to={`/communities/${community.id}/${c.id}`} className={`side-link channel-link ${unread.has(c.id) ? 'unread' : ''}`}>
-      <Icon name={c.kind === 'announcement' ? 'megaphone' : 'hash'} size={18} />
-      {c.name}
+  const link = (c: Channel) => (
+    <NavLink key={c.id} to={`/communities/${community.id}/${c.id}`} className={`chan-link ${unread.has(c.id) ? 'unread' : ''}`}>
+      {c.kind === 'announcement' ? <Megaphone size={17} /> : <Hash size={17} />}
+      <span>{c.name}</span>
     </NavLink>
   );
 
   return (
     <>
-      <Link to="/communities" className="back-link">← All communities</Link>
-      <div className="community-hero" style={{ ['--accent' as string]: community.accent }}>
-        <CommunityBadge name={community.name} accent={community.accent} size={48} />
-        <div>
+      <div className="community-banner" style={{ ['--cb' as string]: community.accent }}>
+        <CommunityBadge name={community.name} accent={community.accent} size={52} />
+        <div className="community-banner-text">
           <h2>{community.name}</h2>
-          <p className="muted small">{community.game ? `${community.game} · ` : ''}{community.memberCount} members</p>
+          <span className="small">
+            <span className="dot presence-online" /> {online} online · {community.memberCount} {community.memberCount === 1 ? "member" : "members"}
+          </span>
         </div>
       </div>
-      <div className="community-actions">
+      <div className="community-tools">
         {isMod && (
-          <button className="btn btn-ghost small" onClick={() => onModal('invite')}>
-            <Icon name="userPlus" size={16} /> Invite
+          <button className="btn sm primary" onClick={() => onModal('invite')}>
+            <UserPlus size={15} /> Invite
           </button>
         )}
         {isMod && (
-          <button className="icon-btn" onClick={() => onModal('settings')} title="Community settings" aria-label="Community settings">
-            <Icon name="settings" size={18} />
+          <button className="icon-btn" onClick={() => onModal('settings')} aria-label="Community settings" data-tip="Settings">
+            <Settings size={18} />
           </button>
         )}
         {community.role !== 'owner' && (
-          <button className="icon-btn danger" onClick={leave} title="Leave community" aria-label="Leave community">
-            <Icon name="door" size={18} />
+          <button className="icon-btn danger" onClick={leave} aria-label="Leave community" data-tip="Leave">
+            <DoorOpen size={18} />
           </button>
         )}
       </div>
-      <div className="side-list">
-        {announcements.length > 0 && <div className="side-section"><span>Announcements</span></div>}
-        {announcements.map(channelLink)}
-        <div className="side-section">
-          <span>Text channels</span>
+      <div className="ctx-list">
+        <div className="ctx-section">
+          <span>Channels</span>
           {isMod && (
-            <button className="icon-btn small" onClick={() => onModal('channel')} title="Create channel" aria-label="Create channel">
-              <Icon name="plus" size={16} />
+            <button className="icon-btn sm" onClick={() => onModal('channel')} aria-label="Create channel" data-tip="New channel">
+              <Plus size={15} />
             </button>
           )}
         </div>
-        {text.map(channelLink)}
-        <div className="side-section"><span>Coming soon</span></div>
-        <span className="side-link disabled"><Icon name="chat" size={18} /> Forums</span>
-        <span className="side-link disabled"><Icon name="users" size={18} /> Voice rooms</span>
-        <span className="side-link disabled"><Icon name="trophy" size={18} /> Events and tournaments</span>
+        {community.channels.filter((c) => c.kind === 'announcement').map(link)}
+        {community.channels.filter((c) => c.kind === 'text').map(link)}
+        <div className="ctx-section"><span>Coming soon</span></div>
+        <span className="chan-link later"><Volume2 size={17} /><span>Voice lounges</span></span>
+        <span className="chan-link later"><MessageSquareText size={17} /><span>Forums</span></span>
+        <span className="chan-link later"><CalendarDays size={17} /><span>Events</span></span>
+        <span className="chan-link later"><Trophy size={17} /><span>Tournaments</span></span>
       </div>
     </>
   );
@@ -181,50 +184,53 @@ function CommunitySidebar({ community, isMod, onModal }: { community: Community;
 
 function MemberList({ community }: { community: Community }) {
   const order = { owner: 0, admin: 1, member: 2 };
-  const sorted = [...community.members].sort(
-    (a, b) => Number(a.presence === 'offline') - Number(b.presence === 'offline') || order[a.role] - order[b.role] || a.displayName.localeCompare(b.displayName),
-  );
+  const sorted = [...community.members].sort((a, b) => order[a.role] - order[b.role] || a.displayName.localeCompare(b.displayName));
   const online = sorted.filter((m) => m.presence !== 'offline');
   const offline = sorted.filter((m) => m.presence === 'offline');
   return (
-    <aside className="side-panel members">
-      <h3 className="panel-title">Online — {online.length}</h3>
+    <aside className="side-panel">
+      <div className="side-panel-head"><h3>Online · {online.length}</h3></div>
       {online.map((m) => <MemberRow key={m.id} user={m} role={m.role} />)}
-      {offline.length > 0 && <h3 className="panel-title">Offline — {offline.length}</h3>}
+      {offline.length > 0 && <div className="side-panel-head"><h3>Offline · {offline.length}</h3></div>}
       {offline.map((m) => <MemberRow key={m.id} user={m} role={m.role} />)}
     </aside>
   );
 }
 
 function CommunitiesLanding({ onCreate, onJoin }: { onCreate: () => void; onJoin: () => void }) {
+  const { communities } = useNexus();
   return (
-    <section className="panel landing">
-      <div className="landing-inner">
-        <h1>Find your people</h1>
-        <p className="muted">Communities bring your team, your friends or your whole game's fanbase into one space with channels for everything.</p>
-        <div className="card-grid two">
-          <button className="action-card" onClick={onCreate}>
-            <Icon name="plus" size={28} />
-            <h3>Create a community</h3>
-            <p className="muted">Start with announcements, general, LFG and clips channels, then make it yours.</p>
-          </button>
-          <button className="action-card" onClick={onJoin}>
-            <Icon name="link" size={28} />
-            <h3>Join with an invite</h3>
-            <p className="muted">Paste an invite link or code from a friend.</p>
-          </button>
-          <Link to="/discover" className="action-card">
-            <Icon name="compass" size={28} />
-            <h3>Browse communities</h3>
-            <p className="muted">See what's active on Nexus and jump in.</p>
-          </Link>
+    <div className="page">
+      <header className="hero-card">
+        <p className="eyebrow">Communities</p>
+        <h1>Your squads, clubs and fan spaces</h1>
+        <p className="muted">Spin one up in seconds. Every community gets announcements, chat, LFG and clips channels, and you can theme it to match.</p>
+        <div className="hero-actions">
+          <button className="btn primary" onClick={onCreate}><Plus size={17} /> Create a community</button>
+          <button className="btn" onClick={onJoin}><Link2 size={17} /> Join with invite</button>
+          <Link className="btn ghost" to="/discover"><Compass size={17} /> Browse</Link>
         </div>
-      </div>
-    </section>
+      </header>
+      {communities.length > 0 && (
+        <>
+          <h3 className="section-title">Your communities</h3>
+          <div className="tile-grid">
+            {communities.map((c) => (
+              <Link key={c.id} to={`/communities/${c.id}`} className="tile" style={{ ['--cb' as string]: c.accent }}>
+                <span className="tile-glow" />
+                <CommunityBadge name={c.name} accent={c.accent} size={52} />
+                <strong>{c.name}</strong>
+                <span className="muted small">{c.game || 'Community'} · {c.memberCount} members</span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
-function CreateCommunityModal({ onClose }: { onClose: () => void }) {
+function CreateCommunityModal({ onClose, onJoin }: { onClose: () => void; onJoin: () => void }) {
   const { setCommunityDetail } = useNexus();
   const navigate = useNavigate();
   const [name, setName] = useState('');
@@ -247,46 +253,50 @@ function CreateCommunityModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="Create a community" onClose={onClose}>
-      <form onSubmit={submit} className="stack">
-        <label>
-          Name
+      <form onSubmit={submit} className="form">
+        <div className="create-preview" style={{ ['--cb' as string]: accent }}>
+          <CommunityBadge name={name || 'New Community'} accent={accent} size={56} />
+          <div>
+            <strong>{name || 'Your community'}</strong>
+            <span className="muted small">{game || 'Any game'}</span>
+          </div>
+        </div>
+        <label className="field">
+          <span>Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={48} placeholder="Midnight Ranked" autoFocus />
         </label>
-        <label>
-          Main game <span className="muted">(optional)</span>
+        <label className="field">
+          <span>Main game</span>
           <input value={game} onChange={(e) => setGame(e.target.value)} maxLength={40} placeholder="Valorant" />
         </label>
-        <label>
-          Description <span className="muted">(optional)</span>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
+        <label className="field">
+          <span>Description</span>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} placeholder="What's this place about?" />
         </label>
-        <AccentPicker value={accent} onChange={setAccent} />
+        <ColorRow value={accent} onChange={setAccent} />
         {error && <p className="form-error">{error}</p>}
         <div className="modal-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary">Create</button>
+          <button type="button" className="btn ghost" onClick={onJoin}>I have an invite</button>
+          <button className="btn primary">Create</button>
         </div>
       </form>
     </Modal>
   );
 }
 
-export function AccentPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function ColorRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <fieldset className="accent-picker">
-      <legend>Accent colour</legend>
-      {ACCENTS.map((a) => (
-        <button
-          type="button"
-          key={a}
-          className={`swatch ${value === a ? 'on' : ''}`}
-          style={{ background: a }}
-          onClick={() => onChange(a)}
-          aria-label={`Accent ${a}`}
-          aria-pressed={value === a}
-        />
-      ))}
-    </fieldset>
+    <div className="field">
+      <span>Accent</span>
+      <div className="swatches">
+        {ACCENTS.map((a) => (
+          <button type="button" key={a} className={`swatch ${value === a ? 'on' : ''}`} style={{ background: a }} onClick={() => onChange(a)} aria-label={`Accent ${a}`} aria-pressed={value === a} />
+        ))}
+        <label className="swatch custom" aria-label="Custom colour" style={{ background: value }}>
+          <input type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+        </label>
+      </div>
+    </div>
   );
 }
 
@@ -310,15 +320,15 @@ function JoinModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="Join a community" onClose={onClose}>
-      <form onSubmit={submit} className="stack">
-        <label>
-          Invite link or code
+      <form onSubmit={submit} className="form">
+        <label className="field">
+          <span>Invite link or code</span>
           <input value={code} onChange={(e) => setCode(e.target.value)} required placeholder="https://…/invite/aB3dE9xY" autoFocus />
         </label>
         {error && <p className="form-error">{error}</p>}
         <div className="modal-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary">Join</button>
+          <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary">Join</button>
         </div>
       </form>
     </Modal>
@@ -345,27 +355,31 @@ function CreateChannelModal({ community, onClose }: { community: Community; onCl
 
   return (
     <Modal title="Create a channel" onClose={onClose}>
-      <form onSubmit={submit} className="stack">
-        <div className="segmented">
-          <button type="button" className={kind === 'text' ? 'on' : ''} onClick={() => setKind('text')}>
-            <Icon name="hash" size={16} /> Text
+      <form onSubmit={submit} className="form">
+        <div className="choice-row">
+          <button type="button" className={`choice ${kind === 'text' ? 'on' : ''}`} onClick={() => setKind('text')}>
+            <Hash size={20} />
+            <strong>Text</strong>
+            <span className="muted small">Everyone can chat</span>
           </button>
-          <button type="button" className={kind === 'announcement' ? 'on' : ''} onClick={() => setKind('announcement')}>
-            <Icon name="megaphone" size={16} /> Announcement
+          <button type="button" className={`choice ${kind === 'announcement' ? 'on' : ''}`} onClick={() => setKind('announcement')}>
+            <Megaphone size={20} />
+            <strong>Announcement</strong>
+            <span className="muted small">Only admins post</span>
           </button>
         </div>
-        <label>
-          Channel name
+        <label className="field">
+          <span>Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={32} placeholder="scrims" autoFocus />
         </label>
-        <label>
-          Topic <span className="muted">(optional)</span>
-          <input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={120} />
+        <label className="field">
+          <span>Topic</span>
+          <input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={120} placeholder="Optional" />
         </label>
         {error && <p className="form-error">{error}</p>}
         <div className="modal-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary">Create channel</button>
+          <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary">Create channel</button>
         </div>
       </form>
     </Modal>
@@ -381,7 +395,6 @@ function InviteModal({ community, onClose }: { community: Community; onClose: ()
     await navigator.clipboard?.writeText(link);
     setCopied(true);
   }
-
   async function regenerate() {
     const r = await api.post<{ inviteCode: string }>(`/communities/${community.id}/invite`);
     setCode(r.inviteCode);
@@ -389,11 +402,11 @@ function InviteModal({ community, onClose }: { community: Community; onClose: ()
   }
 
   return (
-    <Modal title={`Invite friends to ${community.name}`} onClose={onClose}>
+    <Modal title={`Invite people to ${community.name}`} onClose={onClose}>
       <p className="muted">Anyone with this link can join.</p>
       <div className="input-row">
-        <input readOnly value={link} onFocus={(e) => e.target.select()} />
-        <button className="btn btn-primary" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+        <input readOnly value={link} onFocus={(e) => e.target.select()} aria-label="Invite link" />
+        <button className="btn primary" onClick={copy}>{copied ? 'Copied!' : 'Copy'}</button>
       </div>
       <button className="link-btn small" onClick={regenerate}>Reset link (the old one stops working)</button>
     </Modal>
@@ -420,7 +433,6 @@ function CommunitySettingsModal({ community, onClose }: { community: Community; 
       setError((err as Error).message);
     }
   }
-
   async function run(fn: () => Promise<{ community: Community }>) {
     try {
       setCommunityDetail((await fn()).community);
@@ -428,7 +440,6 @@ function CommunitySettingsModal({ community, onClose }: { community: Community; 
       setError((err as Error).message);
     }
   }
-
   async function destroy() {
     if (!window.confirm(`Delete ${community.name} for everyone? This can't be undone.`)) return;
     await api.del(`/communities/${community.id}`);
@@ -439,40 +450,28 @@ function CommunitySettingsModal({ community, onClose }: { community: Community; 
 
   return (
     <Modal title="Community settings" onClose={onClose} wide>
-      <form onSubmit={save} className="stack">
-        <label>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={48} />
-        </label>
-        <label>
-          Main game
-          <input value={game} onChange={(e) => setGame(e.target.value)} maxLength={40} />
-        </label>
-        <label>
-          Description
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
-        </label>
-        <AccentPicker value={accent} onChange={setAccent} />
-        <div className="modal-actions">
-          <button className="btn btn-primary">Save changes</button>
+      <form onSubmit={save} className="form">
+        <div className="form-2col">
+          <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={48} /></label>
+          <label className="field"><span>Main game</span><input value={game} onChange={(e) => setGame(e.target.value)} maxLength={40} /></label>
         </div>
+        <label className="field"><span>Description</span><textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} /></label>
+        <ColorRow value={accent} onChange={setAccent} />
+        <div className="modal-actions"><button className="btn primary">Save changes</button></div>
       </form>
-
-      <h3 className="panel-title">Members and roles</h3>
+      <h4 className="side-label">Members and roles</h4>
       <div className="role-list">
         {community.members.map((m) => (
           <div key={m.id} className="role-row">
-            <span>{m.displayName} <span className="muted small">@{m.username}</span></span>
-            <span className={`role-tag role-${m.role}`}>{m.role}</span>
+            <span className="role-name">{m.displayName} <span className="muted small">@{m.username}</span></span>
+            <span className={`role-pill role-${m.role}`}>{m.role}</span>
             {isOwner && m.role !== 'owner' && (
-              <button className="btn btn-ghost small" onClick={() => run(() => api.patch(`/communities/${community.id}/members/${m.id}`, { role: m.role === 'admin' ? 'member' : 'admin' }))}>
+              <button className="btn ghost sm" onClick={() => run(() => api.patch(`/communities/${community.id}/members/${m.id}`, { role: m.role === 'admin' ? 'member' : 'admin' }))}>
                 {m.role === 'admin' ? 'Make member' : 'Make admin'}
               </button>
             )}
             {m.id !== me.id && m.role !== 'owner' && (isOwner || m.role === 'member') && (
-              <button className="btn btn-danger-ghost small" onClick={() => run(() => api.del(`/communities/${community.id}/members/${m.id}`))}>
-                Remove
-              </button>
+              <button className="btn danger-ghost sm" onClick={() => run(() => api.del(`/communities/${community.id}/members/${m.id}`))}>Remove</button>
             )}
           </div>
         ))}
@@ -480,7 +479,11 @@ function CommunitySettingsModal({ community, onClose }: { community: Community; 
       {error && <p className="form-error">{error}</p>}
       {isOwner && (
         <div className="danger-zone">
-          <button className="btn btn-danger" onClick={destroy}>Delete community</button>
+          <div>
+            <strong>Delete community</strong>
+            <p className="muted small">Removes every channel and message for everyone.</p>
+          </div>
+          <button className="btn danger" onClick={destroy}>Delete</button>
         </div>
       )}
     </Modal>

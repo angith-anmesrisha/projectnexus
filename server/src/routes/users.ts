@@ -19,7 +19,7 @@ export function userRoutes(rt: Realtime) {
   router.patch('/users/me', (req, res) => {
     const id = me(req);
     const body = req.body ?? {};
-    const updates: Record<string, string | number> = {};
+    const updates: Record<string, string | number | null> = {};
 
     const displayName = str(body, 'displayName', { min: 1, max: 32, optional: true });
     if (displayName !== undefined) updates.display_name = displayName;
@@ -42,6 +42,20 @@ export function userRoutes(rt: Realtime) {
       }
       const games = [...new Set((body.games as string[]).map((g) => g.trim().slice(0, 40)).filter(Boolean))];
       updates.games = JSON.stringify(games.slice(0, 12));
+    }
+
+    for (const [field, column] of [['avatarUploadId', 'avatar_url'], ['bannerUploadId', 'banner_url']] as const) {
+      const v = body[field];
+      if (v === undefined) continue;
+      if (v === null) {
+        updates[column] = null as unknown as string;
+        continue;
+      }
+      const upload = db.prepare('SELECT file, mime FROM uploads WHERE id = ? AND owner_id = ?').get(String(v), id) as
+        | { file: string; mime: string }
+        | undefined;
+      if (!upload || !upload.mime.startsWith('image/')) throw badRequest('Profile images must be an image you uploaded');
+      updates[column] = `/uploads/${upload.file}`;
     }
 
     const keys = Object.keys(updates);

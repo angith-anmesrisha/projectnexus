@@ -14,6 +14,8 @@ export interface User {
   lfg: boolean;
   games: string[];
   createdAt: number;
+  avatar: string | null;
+  banner: string | null;
 }
 
 export interface Me extends User {
@@ -40,6 +42,7 @@ export interface Conversation extends Channel {
   members: User[];
   others: User[];
   lastActivity: number;
+  lastMessage: { authorId: string; text: string } | null;
 }
 
 export interface CommunitySummary {
@@ -65,11 +68,29 @@ export interface Reaction {
   me: boolean;
 }
 
+export interface Attachment {
+  kind: 'image' | 'video' | 'gif' | 'file';
+  url: string;
+  name: string;
+  mime: string;
+  size: number | null;
+  width: number | null;
+  height: number | null;
+}
+
+export interface StickerRef {
+  id: string;
+  name?: string;
+  url?: string;
+}
+
 export interface Message {
   id: number;
   channelId: string;
   author: User;
   content: string;
+  attachments: Attachment[];
+  sticker: StickerRef | null;
   pinned: boolean;
   editedAt: number | null;
   createdAt: number;

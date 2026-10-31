@@ -9,10 +9,13 @@ import { createRealtime } from './realtime.ts';
 import { authRoutes } from './routes/auth.ts';
 import { communityRoutes } from './routes/communities.ts';
 import { messageRoutes } from './routes/messages.ts';
+import { appearanceRoutes } from './routes/appearance.ts';
+import { mediaRoutes, uploadsStatic } from './routes/media.ts';
 import { userRoutes } from './routes/users.ts';
 
 export interface AppOptions {
   dbPath: string;
+  uploadDir: string;
   /** Built client to serve, if present. */
   staticDir?: string;
   secureCookies?: boolean;
@@ -24,7 +27,7 @@ export function createNexus(opts: AppOptions) {
   const app = express();
 
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '64kb' }));
+  app.use(express.json({ limit: '128kb' }));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
@@ -40,14 +43,17 @@ export function createNexus(opts: AppOptions) {
   authed.use(userRoutes(rt));
   authed.use(communityRoutes(rt));
   authed.use(messageRoutes(rt));
+  authed.use(mediaRoutes(rt, opts.uploadDir));
+  authed.use(appearanceRoutes(rt));
   app.use('/api', authed);
+  app.use('/uploads', uploadsStatic(opts.uploadDir));
   app.use('/api', (_req, _res, next) => next(notFound('No such API route')));
 
   if (opts.staticDir && existsSync(opts.staticDir)) {
     const dir = opts.staticDir;
     app.use(express.static(dir));
     // Client-side routing: anything that is not an API call gets the app shell.
-    app.get(/^(?!\/api\/|\/socket\.io\/).*/, (_req, res) => res.sendFile(join(dir, 'index.html')));
+    app.get(/^(?!\/api\/|\/socket\.io\/|\/uploads\/).*/, (_req, res) => res.sendFile(join(dir, 'index.html')));
   }
 
   app.use(errorHandler);

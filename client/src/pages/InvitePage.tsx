@@ -22,7 +22,7 @@ export function InvitePage() {
   }, [code, navigate, setCommunityDetail]);
 
   return (
-    <div className="empty-state">
+    <div className="empty">
       {error ? (
         <>
           <p className="form-error">{error}</p>

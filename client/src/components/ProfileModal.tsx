@@ -5,7 +5,7 @@ import { presenceLabel } from '../lib/format';
 import { useNexus } from '../lib/store';
 import type { Conversation, FriendLists, User } from '../lib/types';
 import { Avatar } from './Avatar';
-import { Icon } from './Icon';
+import { Gamepad2, MessagesSquare, UserPlus } from 'lucide-react';
 import { Modal } from './Modal';
 
 type Relationship = 'self' | 'friend' | 'incoming' | 'outgoing' | 'blocked' | 'none';
@@ -69,7 +69,7 @@ export function ProfileModal({ username, onClose }: { username: string; onClose:
       {!user && !error && <p className="muted">Loading…</p>}
       {user && (
         <div className="profile">
-          <div className="profile-banner" style={{ ['--accent' as string]: user.accent }} />
+          <div className="profile-banner" style={{ ['--av' as string]: user.accent }}>{user.banner && <img src={user.banner} alt="" />}</div>
           <div className="profile-head">
             <Avatar user={user} size={72} />
             <div>
@@ -79,15 +79,15 @@ export function ProfileModal({ username, onClose }: { username: string; onClose:
           </div>
           {user.nowPlaying && (
             <p className="now-playing">
-              <Icon name="gamepad" size={16} /> Playing <strong>{user.nowPlaying}</strong>
+              <Gamepad2 size={16} /> Playing <strong>{user.nowPlaying}</strong>
             </p>
           )}
-          {user.lfg && <span className="tag tag-lfg">Looking for teammates</span>}
+          {user.lfg && <span className="chip lfg">Looking for teammates</span>}
           {user.bio && <p className="profile-bio">{user.bio}</p>}
           {user.games.length > 0 && (
-            <div className="tag-row">
+            <div className="chip-row">
               {user.games.map((g) => (
-                <span key={g} className="tag">{g}</span>
+                <span key={g} className="chip">{g}</span>
               ))}
             </div>
           )}
@@ -95,30 +95,30 @@ export function ProfileModal({ username, onClose }: { username: string; onClose:
           {rel !== 'self' && (
             <div className="profile-actions">
               {rel === 'friend' && (
-                <button className="btn btn-primary" onClick={message}>
-                  <Icon name="chat" size={16} /> Message
+                <button className="btn primary" onClick={message}>
+                  <MessagesSquare size={16} /> Message
                 </button>
               )}
               {rel === 'none' && (
-                <button className="btn btn-primary" onClick={() => act(() => api.post('/friends/requests', { username: user.username }))}>
-                  <Icon name="userPlus" size={16} /> Add friend
+                <button className="btn primary" onClick={() => act(() => api.post('/friends/requests', { username: user.username }))}>
+                  <UserPlus size={16} /> Add friend
                 </button>
               )}
               {rel === 'incoming' && (
-                <button className="btn btn-primary" onClick={() => act(() => api.post(`/friends/requests/${user.id}/accept`))}>
+                <button className="btn primary" onClick={() => act(() => api.post(`/friends/requests/${user.id}/accept`))}>
                   Accept request
                 </button>
               )}
               {rel === 'outgoing' && <button className="btn" disabled>Request sent</button>}
               {rel === 'friend' && (
-                <button className="btn btn-ghost" onClick={() => act(() => api.del(`/friends/${user.id}`))}>Remove friend</button>
+                <button className="btn ghost" onClick={() => act(() => api.del(`/friends/${user.id}`))}>Remove friend</button>
               )}
               {rel === 'blocked' ? (
-                <button className="btn btn-ghost" onClick={() => act(() => api.del(`/blocks/${user.id}`))}>Unblock</button>
+                <button className="btn ghost" onClick={() => act(() => api.del(`/blocks/${user.id}`))}>Unblock</button>
               ) : (
-                <button className="btn btn-danger-ghost" onClick={() => act(() => api.post(`/blocks/${user.id}`))}>Block</button>
+                <button className="btn danger-ghost" onClick={() => act(() => api.post(`/blocks/${user.id}`))}>Block</button>
               )}
-              <button className="btn btn-danger-ghost" onClick={() => setReporting((v) => !v)}>Report</button>
+              <button className="btn danger-ghost" onClick={() => setReporting((v) => !v)}>Report</button>
             </div>
           )}
           {reporting && (
@@ -129,7 +129,7 @@ export function ProfileModal({ username, onClose }: { username: string; onClose:
                 onChange={(e) => setReason(e.target.value)}
                 maxLength={500}
               />
-              <button className="btn btn-danger" disabled={reason.trim().length < 3} onClick={report}>Send report</button>
+              <button className="btn danger" disabled={reason.trim().length < 3} onClick={report}>Send report</button>
             </div>
           )}
           {notice && <p className="notice">{notice}</p>}

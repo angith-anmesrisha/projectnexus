@@ -14,6 +14,8 @@ export interface UserRow {
   lfg: number;
   games: string;
   created_at: number;
+  avatar_url: string | null;
+  banner_url: string | null;
 }
 
 export type Presence = 'online' | 'idle' | 'dnd' | 'offline';
@@ -29,6 +31,8 @@ export interface PublicUser {
   lfg: boolean;
   games: string[];
   createdAt: number;
+  avatar: string | null;
+  banner: string | null;
 }
 
 export interface Ctx {
@@ -58,6 +62,8 @@ export function publicUser(ctx: Ctx, user: UserRow): PublicUser {
     lfg: !!user.lfg,
     games: JSON.parse(user.games),
     createdAt: user.created_at,
+    avatar: user.avatar_url,
+    banner: user.banner_url,
   };
 }
 
@@ -88,6 +94,28 @@ export interface MessageRow {
   edited_at: number | null;
   deleted_at: number | null;
   created_at: number;
+  attachments: string;
+  sticker: string | null;
+}
+
+export interface Attachment {
+  kind: 'image' | 'video' | 'gif' | 'file';
+  url: string;
+  name: string;
+  mime: string;
+  size: number | null;
+  width: number | null;
+  height: number | null;
+}
+
+/** Short text standing in for a message in reply previews and notifications. */
+export function messageSummary(r: MessageRow): string {
+  if (r.content) return r.content.slice(0, 200);
+  if (r.sticker) return 'Sent a sticker';
+  const atts = JSON.parse(r.attachments) as Attachment[];
+  if (atts.some((a) => a.kind === 'gif')) return 'GIF';
+  if (atts.length) return atts.length === 1 ? `Attachment: ${atts[0].name}` : `${atts.length} attachments`;
+  return '';
 }
 
 export function serializeMessages(ctx: Ctx, viewerId: string, rows: MessageRow[]) {
@@ -130,6 +158,8 @@ export function serializeMessages(ctx: Ctx, viewerId: string, rows: MessageRow[]
       channelId: r.channel_id,
       author: authors.get(r.author_id)!,
       content: r.content,
+      attachments: JSON.parse(r.attachments) as Attachment[],
+      sticker: r.sticker ? (JSON.parse(r.sticker) as { id: string; name?: string; url?: string }) : null,
       pinned: !!r.pinned,
       editedAt: r.edited_at,
       createdAt: r.created_at,
@@ -138,7 +168,7 @@ export function serializeMessages(ctx: Ctx, viewerId: string, rows: MessageRow[]
         ? {
             id: reply.id,
             author: authors.get(reply.author_id)!,
-            content: reply.deleted_at ? null : reply.content.slice(0, 200),
+            content: reply.deleted_at ? null : messageSummary(reply),
           }
         : null,
     };
@@ -167,13 +197,14 @@ export function serializeConversation(ctx: Ctx, viewerId: string, c: ChannelRow)
   const members = usersById(ctx, channelMemberIds(ctx.db, c.id));
   const last = ctx.db
     .prepare(
-      'SELECT created_at FROM messages WHERE channel_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
+      'SELECT * FROM messages WHERE channel_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1',
     )
-    .get(c.id) as { created_at: number } | undefined;
+    .get(c.id) as MessageRow | undefined;
   return {
     ...serializeChannel(c),
     members,
     others: members.filter((m) => m.id !== viewerId),
     lastActivity: last?.created_at ?? c.created_at,
+    lastMessage: last ? { authorId: last.author_id, text: messageSummary(last) } : null,
   };
 }

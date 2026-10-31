@@ -1,6 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
 import { disconnectSocket, getSocket } from './socket';
+import { useAppearance } from './appearanceStore';
+import { ping } from './sound';
 import type { Community, CommunitySummary, Conversation, FriendLists, Me, MessageEvent, User } from './types';
 
 interface NexusState {
@@ -49,6 +51,7 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
   const [unread, setUnread] = useState<Set<string>>(new Set());
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const { plugin } = useAppearance();
 
   const upsertCommunity = useCallback((c: CommunitySummary) => {
     setCommunities((list) =>
@@ -81,11 +84,12 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
     });
   }, []);
 
-  // Initial data.
-  useEffect(() => {
-    api.get<FriendLists>('/friends').then(setFriends);
-    api.get<{ communities: CommunitySummary[] }>('/communities').then((r) => setCommunities(r.communities));
-    api.get<{ conversations: Conversation[] }>('/dms').then((r) => setConversations(r.conversations));
+  // Initial data. Also re-run on every socket (re)connect, so presence and
+  // messages that changed while we weren't subscribed are never stale.
+  const loadAll = useCallback(() => {
+    api.get<FriendLists>('/friends').then(setFriends).catch(() => {});
+    api.get<{ communities: CommunitySummary[] }>('/communities').then((r) => setCommunities(r.communities)).catch(() => {});
+    api.get<{ conversations: Conversation[] }>('/dms').then((r) => setConversations(r.conversations)).catch(() => {});
   }, []);
 
   // Realtime updates that affect app-wide state.
@@ -109,14 +113,18 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
       });
     };
     const onCommunityRemoved = ({ id }: { id: string }) => removeCommunity(id);
-    socket.on('connect', () => setConnected(true));
+    socket.on('connect', () => {
+      setConnected(true);
+      loadAll();
+    });
     socket.on('disconnect', () => setConnected(false));
     socket.on('user:update', onUser);
     socket.on('friends:update', setFriends);
     socket.on('community:update', setCommunityDetail);
     socket.on('community:removed', onCommunityRemoved);
     socket.on('dm:new', upsertConversation);
-    socket.connect();
+    if (socket.connected) loadAll();
+    else socket.connect();
     return () => {
       socket.off('user:update', onUser);
       socket.off('friends:update', setFriends);
@@ -126,7 +134,10 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
       socket.off('connect');
       socket.off('disconnect');
     };
-  }, [initialMe.id, removeCommunity, setCommunityDetail, upsertConversation]);
+  }, [initialMe.id, loadAll, removeCommunity, setCommunityDetail, upsertConversation]);
+
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
 
   // Unread tracking and conversation ordering.
   useEffect(() => {
@@ -134,17 +145,22 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
     const onMessage = (m: MessageEvent) => {
       setConversations((list) => {
         const c = list.find((x) => x.id === m.channelId);
-        return c ? [{ ...c, lastActivity: m.createdAt }, ...list.filter((x) => x.id !== c.id)] : list;
+        if (!c) return list;
+        const text = m.content || (m.sticker ? 'Sent a sticker' : m.attachments?.length ? 'Sent an attachment' : '');
+        return [{ ...c, lastActivity: m.createdAt, lastMessage: { authorId: m.author.id, text } }, ...list.filter((x) => x.id !== c.id)];
       });
-      if (m.channelId !== activeChannel && m.author.id !== me.id) {
-        setUnread((s) => new Set(s).add(m.channelId));
-      }
+      if (m.author.id === me.id) return;
+      const away = m.channelId !== activeChannel || document.hidden;
+      if (m.channelId !== activeChannel) setUnread((s) => new Set(s).add(m.channelId));
+      const isDm = conversationsRef.current.some((c) => c.id === m.channelId);
+      const mentioned = new RegExp(`@${me.username.replace(/\./g, '\\.')}\\b`, 'i').test(m.content);
+      if (away && (isDm || mentioned) && plugin('sounds') && me.status !== 'dnd') ping();
     };
     socket.on('message:new', onMessage);
     return () => {
       socket.off('message:new', onMessage);
     };
-  }, [activeChannel, me.id]);
+  }, [activeChannel, me.id, me.username, me.status, plugin]);
 
   const logout = useCallback(async () => {
     await api.post('/auth/logout');
