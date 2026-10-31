@@ -11,6 +11,7 @@ import { MessagesPage } from './pages/MessagesPage';
 import { CommunitiesPage } from './pages/CommunitiesPage';
 import { DiscoverPage } from './pages/DiscoverPage';
 import { ComingSoonPage } from './pages/ComingSoonPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { StudioPage } from './pages/StudioPage';
 import { InvitePage } from './pages/InvitePage';
 
@@ -48,7 +49,7 @@ export function App() {
               <Route path="messages" element={<MessagesPage />} />
               <Route path="messages/:channelId" element={<MessagesPage />} />
               <Route path="tournaments" element={<ComingSoonPage section="tournaments" />} />
-              <Route path="notifications" element={<ComingSoonPage section="notifications" />} />
+              <Route path="notifications" element={<NotificationsPage />} />
               <Route path="studio" element={<StudioPage />} />
               <Route path="studio/:section" element={<StudioPage />} />
               <Route path="settings" element={<Navigate to="/studio/profile" replace />} />

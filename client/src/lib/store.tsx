@@ -3,7 +3,7 @@ import { api } from './api';
 import { disconnectSocket, getSocket } from './socket';
 import { useAppearance } from './appearanceStore';
 import { ping } from './sound';
-import type { Community, CommunitySummary, Conversation, FriendLists, Me, MessageEvent, User } from './types';
+import type { Community, CommunitySummary, Conversation, FriendLists, Me, MessageEvent, Notification, User } from './types';
 
 interface NexusState {
   me: Me;
@@ -25,6 +25,12 @@ interface NexusState {
   /** Community details are loaded on demand and kept live by socket events. */
   communityDetails: Record<string, Community>;
   setCommunityDetail: (c: Community) => void;
+  /** Unread notification count for the inbox badge. */
+  notificationsUnread: number;
+  setNotificationsUnread: (n: number) => void;
+  /** Short-lived pop-ups for new notifications. */
+  toasts: Notification[];
+  dismissToast: (id: string) => void;
   logout: () => Promise<void>;
 }
 
@@ -51,7 +57,10 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
   const [unread, setUnread] = useState<Set<string>>(new Set());
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [notificationsUnread, setNotificationsUnread] = useState(0);
+  const [toasts, setToasts] = useState<Notification[]>([]);
   const { plugin } = useAppearance();
+  const dismissToast = useCallback((id: string) => setToasts((t) => t.filter((x) => x.id !== id)), []);
 
   const upsertCommunity = useCallback((c: CommunitySummary) => {
     setCommunities((list) =>
@@ -90,7 +99,29 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
     api.get<FriendLists>('/friends').then(setFriends).catch(() => {});
     api.get<{ communities: CommunitySummary[] }>('/communities').then((r) => setCommunities(r.communities)).catch(() => {});
     api.get<{ conversations: Conversation[] }>('/dms').then((r) => setConversations(r.conversations)).catch(() => {});
+    api.get<{ unread: number }>('/notifications?limit=1').then((r) => setNotificationsUnread(r.unread)).catch(() => {});
   }, []);
+
+  // Live notifications: bump the badge and pop a toast (unless on do not disturb).
+  const meStatusRef = useRef(me.status);
+  meStatusRef.current = me.status;
+  useEffect(() => {
+    const socket = getSocket();
+    const onNew = ({ notification, unread }: { notification: Notification; unread: number }) => {
+      setNotificationsUnread(unread);
+      if (meStatusRef.current === 'dnd') return;
+      setToasts((t) => [notification, ...t].slice(0, 3));
+      window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== notification.id)), 6000);
+      if (plugin('sounds')) ping();
+    };
+    const onRead = ({ unread }: { unread: number }) => setNotificationsUnread(unread);
+    socket.on('notification:new', onNew);
+    socket.on('notification:read', onRead);
+    return () => {
+      socket.off('notification:new', onNew);
+      socket.off('notification:read', onRead);
+    };
+  }, [plugin]);
 
   // Realtime updates that affect app-wide state.
   useEffect(() => {
@@ -153,8 +184,7 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
       const away = m.channelId !== activeChannel || document.hidden;
       if (m.channelId !== activeChannel) setUnread((s) => new Set(s).add(m.channelId));
       const isDm = conversationsRef.current.some((c) => c.id === m.channelId);
-      const mentioned = new RegExp(`@${me.username.replace(/\./g, '\\.')}\\b`, 'i').test(m.content);
-      if (away && (isDm || mentioned) && plugin('sounds') && me.status !== 'dnd') ping();
+      if (away && isDm && plugin("sounds") && me.status !== "dnd") ping();
     };
     socket.on('message:new', onMessage);
     return () => {
@@ -202,9 +232,13 @@ export function NexusProvider({ initialMe, onLogout, children }: { initialMe: Me
       markRead,
       communityDetails: liveCommunityDetails,
       setCommunityDetail,
+      notificationsUnread,
+      setNotificationsUnread,
+      toasts,
+      dismissToast,
       logout,
     }),
-    [me, friends, communities, liveConversations, unread, connected, upsertCommunity, removeCommunity, upsertConversation, removeConversation, markRead, liveCommunityDetails, setCommunityDetail, logout],
+    [me, friends, communities, liveConversations, unread, connected, upsertCommunity, removeCommunity, upsertConversation, removeConversation, markRead, liveCommunityDetails, setCommunityDetail, notificationsUnread, toasts, dismissToast, logout],
   );
 
   return <NexusContext.Provider value={value}>{children}</NexusContext.Provider>;

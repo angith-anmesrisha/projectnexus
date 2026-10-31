@@ -1,14 +1,20 @@
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Clapperboard, Compass, Gamepad2, MessagesSquare, Newspaper, Palette, Plus, Trophy, UserPlus, Volume2 } from 'lucide-react';
+import { ArrowRight, CalendarDays, Clapperboard, Compass, Gamepad2, MessagesSquare, Newspaper, Palette, Plus, Trophy, UserPlus, Volume2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { relative, conversationTitle } from '../lib/format';
 import { useNexus } from '../lib/store';
-import type { Conversation, User } from '../lib/types';
+import type { Conversation, NexusEvent, User } from '../lib/types';
+import { EventCard } from '../components/EventsView';
 import { Avatar, CommunityBadge } from '../components/Avatar';
 
 export function HomePage() {
   const { me, friends, communities, conversations, unread, upsertConversation } = useNexus();
   const navigate = useNavigate();
+  const [events, setEvents] = useState<NexusEvent[]>([]);
+  useEffect(() => {
+    api.get<{ events: NexusEvent[] }>('/events').then((r) => setEvents(r.events)).catch(() => {});
+  }, []);
   const online = friends.friends.filter((f) => f.presence !== 'offline');
   const playing = online.filter((f) => f.nowPlaying);
   const lfg = friends.friends.filter((f) => f.lfg);
@@ -125,6 +131,19 @@ export function HomePage() {
                 ))
               )}
             </article>
+
+            {events.length > 0 && (
+              <article className="card span-3">
+                <div className="card-head">
+                  <h3><CalendarDays size={17} /> Upcoming events</h3>
+                </div>
+                <div className="home-events">
+                  {events.slice(0, 3).map((e) => (
+                    <EventCard key={e.id} e={e} compact onChange={(next) => setEvents((l) => (next ? l.map((x) => (x.id === e.id ? next : x)) : l.filter((x) => x.id !== e.id)))} />
+                  ))}
+                </div>
+              </article>
+            )}
 
             <article className="card span-3 roadmap-card">
               <div className="card-head"><h3>Coming to Nexus</h3></div>

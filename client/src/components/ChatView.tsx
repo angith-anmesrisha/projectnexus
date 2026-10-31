@@ -27,9 +27,13 @@ interface Props {
   /** Shown above the first message. */
   intro?: ReactNode;
   kind: 'dm' | 'channel';
+  /** Scroll to and flash this message once loaded (from search or notifications). */
+  focusMessageId?: number;
+  /** Extra buttons for the header, before the panel toggles. */
+  headerExtra?: ReactNode;
 }
 
-export function ChatView({ channel, title, icon, topic, lockedReason, canModerate, canPin, members, aside, intro, kind }: Props) {
+export function ChatView({ channel, title, icon, topic, lockedReason, canModerate, canPin, members, aside, intro, kind, focusMessageId, headerExtra }: Props) {
   const { me, friends, setActiveChannel, markRead } = useNexus();
   const { appearance, update, plugin } = useAppearance();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -232,6 +236,19 @@ export function ChatView({ channel, title, icon, topic, lockedReason, canModerat
     [me.id, me.username, canModerate, canPin, lockedReason, appearance.plugins, run, updateLocal],
   );
 
+  useEffect(() => {
+    if (loading || !focusMessageId) return;
+    const t = window.setTimeout(() => {
+      const el = listRef.current?.querySelector(`[data-id="${focusMessageId}"]`);
+      if (!el) return;
+      stick.current = false;
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('flash');
+      window.setTimeout(() => el.classList.remove('flash'), 1600);
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [loading, focusMessageId]);
+
   async function togglePanel(p: 'members' | 'pins' | 'search') {
     const next = panel === p ? null : p;
     setPanel(next);
@@ -262,6 +279,7 @@ export function ChatView({ channel, title, icon, topic, lockedReason, canModerat
           {topic && <span className="chat-topic">{topic}</span>}
         </div>
         <div className="chat-head-actions">
+          {headerExtra}
           <button className={`icon-btn ${panel === 'search' ? 'on' : ''}`} onClick={() => togglePanel('search')} aria-label="Search this conversation" data-tip="Search">
             <Search size={18} />
           </button>
@@ -359,7 +377,7 @@ export function ChatView({ channel, title, icon, topic, lockedReason, canModerat
             {error && <p className="form-error">{error}</p>}
             <Composer
               channelId={channel.id}
-              placeholder={kind === 'dm' ? `Message ${title}` : `Message #${title}`}
+              placeholder={kind === 'dm' ? `Message ${title}` : channel.kind === 'thread' ? 'Reply to this post' : `Message #${title}`}
               lockedReason={lockedReason}
               replyTo={replyTo}
               onCancelReply={() => setReplyTo(null)}

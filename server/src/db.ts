@@ -154,6 +154,62 @@ CREATE TABLE IF NOT EXISTS themes (
 );
 `;
 
+const SCHEMA_V3 = `
+CREATE TABLE IF NOT EXISTS notifications (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL,   -- mention | reply | friend_request | friend_accept | event
+  actor_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+  community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,
+  channel_id   TEXT REFERENCES channels(id) ON DELETE CASCADE,
+  message_id   INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+  event_id     TEXT,
+  text         TEXT NOT NULL DEFAULT '',
+  read_at      INTEGER,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id, created_at);
+
+-- Custom community roles. Permissions are a bit set, see PERMS in access.ts.
+CREATE TABLE IF NOT EXISTS roles (
+  id           TEXT PRIMARY KEY,
+  community_id TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  color        TEXT NOT NULL DEFAULT '',
+  permissions  INTEGER NOT NULL DEFAULT 0,
+  position     INTEGER NOT NULL DEFAULT 0,
+  hoist        INTEGER NOT NULL DEFAULT 0,  -- show members with this role in their own group
+  created_at   INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS member_roles (
+  role_id      TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  community_id TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  PRIMARY KEY (role_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  id           TEXT PRIMARY KEY,
+  community_id TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  title        TEXT NOT NULL,
+  description  TEXT NOT NULL DEFAULT '',
+  location     TEXT NOT NULL DEFAULT '',
+  starts_at    INTEGER NOT NULL,
+  ends_at      INTEGER NOT NULL,
+  created_by   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS events_community ON events(community_id, starts_at);
+
+CREATE TABLE IF NOT EXISTS event_rsvps (
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status   TEXT NOT NULL,  -- going | interested
+  PRIMARY KEY (event_id, user_id)
+);
+`;
+
 /** Add a column if an older database does not have it yet. */
 function addColumn(db: DB, table: string, column: string, definition: string) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
@@ -170,6 +226,10 @@ export function openDb(path: string): DB {
   addColumn(db, 'users', 'banner_url', 'TEXT');
   addColumn(db, 'messages', 'attachments', "TEXT NOT NULL DEFAULT '[]'");
   addColumn(db, 'messages', 'sticker', 'TEXT');
+  db.exec(SCHEMA_V3);
+  // Forum posts are channels of kind 'thread' that point at their forum.
+  addColumn(db, 'channels', 'parent_id', 'TEXT REFERENCES channels(id) ON DELETE CASCADE');
+  db.exec('CREATE INDEX IF NOT EXISTS channels_parent ON channels(parent_id)');
   return db;
 }
 

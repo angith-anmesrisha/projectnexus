@@ -4,6 +4,7 @@ import { me } from '../auth.ts';
 import { areFriends, isBlockedEitherWay } from '../access.ts';
 import { tx } from '../db.ts';
 import { HttpError, badRequest, notFound, str } from '../http.ts';
+import { notify } from '../notify.ts';
 import type { Realtime } from '../realtime.ts';
 import { getUser, publicUser, selfUser, usersById, type UserRow } from '../serialize.ts';
 
@@ -147,10 +148,14 @@ export function userRoutes(rt: Realtime) {
     if (reverse) {
       // They already asked us, so sending a request back accepts it.
       db.prepare(`UPDATE friendships SET status = 'accepted' WHERE requester_id = ? AND addressee_id = ?`).run(target.id, id);
+      notify(rt, [target.id], { kind: 'friend_accept', actorId: id });
     } else {
-      db.prepare(
-        `INSERT OR IGNORE INTO friendships (requester_id, addressee_id, status, created_at) VALUES (?, ?, 'pending', ?)`,
-      ).run(id, target.id, Date.now());
+      const added = db
+        .prepare(
+          `INSERT OR IGNORE INTO friendships (requester_id, addressee_id, status, created_at) VALUES (?, ?, 'pending', ?)`,
+        )
+        .run(id, target.id, Date.now());
+      if (added.changes) notify(rt, [target.id], { kind: 'friend_request', actorId: id });
     }
     notifyFriends(id, target.id);
     res.status(201).json(friendsPayload(id));
@@ -166,6 +171,7 @@ export function userRoutes(rt: Realtime) {
       .run(req.params.userId, id);
     if (result.changes === 0) throw notFound('No pending request from that user');
     notifyFriends(id, req.params.userId);
+    notify(rt, [req.params.userId], { kind: 'friend_accept', actorId: id });
     res.json(friendsPayload(id));
   });
 

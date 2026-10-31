@@ -6,7 +6,10 @@ import {
   assertCanPost,
   canModerateChannel,
   canPin,
+  canReadChannel,
   channelMemberIds,
+  hasPerm,
+  PERMS,
   getChannel,
   isBlockedEitherWay,
   readableChannel,
@@ -16,6 +19,7 @@ import { tx } from '../db.ts';
 import { HttpError, badRequest, forbidden, notFound, str } from '../http.ts';
 import type { Realtime } from '../realtime.ts';
 import { getMessageRow, serializeConversation, serializeMessages, type Attachment, type MessageRow } from '../serialize.ts';
+import { notify } from '../notify.ts';
 import { BUILTIN_STICKERS, attachmentFromUpload, isAllowedGifUrl, type UploadRow } from './media.ts';
 
 const MAX_MESSAGE = 2000;
@@ -86,6 +90,32 @@ export function messageRoutes(rt: Realtime) {
     throw badRequest('Unknown sticker');
   }
 
+  /**
+   * Mentions and replies in community channels create notifications. DMs and
+   * groups already show unread badges, so they don't add to the inbox.
+   */
+  function notifyForMessage(authorId: string, channel: ChannelRow, messageId: number, content: string, replyTo: number | null) {
+    if (!channel.community_id) return;
+    const base = { actorId: authorId, communityId: channel.community_id, channelId: channel.id, messageId, text: content };
+    const mentioned = new Set<string>();
+    const names = [...content.matchAll(/(?:^|[^\w`])@([a-zA-Z0-9_.]{2,24})\b/g)].map((m) => m[1].toLowerCase());
+    if (names.includes('everyone') && hasPerm(db, authorId, channel.community_id, PERMS.mentionEveryone)) {
+      const all = db.prepare('SELECT user_id FROM community_members WHERE community_id = ? LIMIT 500').all(channel.community_id) as {
+        user_id: string;
+      }[];
+      for (const r of all) mentioned.add(r.user_id);
+    }
+    for (const name of new Set(names.filter((n) => n !== 'everyone').slice(0, 20))) {
+      const u = db.prepare('SELECT id FROM users WHERE username = ?').get(name) as { id: string } | undefined;
+      if (u && canReadChannel(db, u.id, channel)) mentioned.add(u.id);
+    }
+    if (mentioned.size) notify(rt, mentioned, { kind: 'mention', ...base });
+    if (replyTo !== null) {
+      const target = getMessageRow(db, replyTo);
+      if (target && !mentioned.has(target.author_id)) notify(rt, [target.author_id], { kind: 'reply', ...base });
+    }
+  }
+
   /** A message the viewer can see, plus its channel. */
   function visibleMessage(viewerId: string, rawId: string) {
     const id = Number(rawId);
@@ -148,6 +178,11 @@ export function messageRoutes(rt: Realtime) {
       .run(channel.id, userId, content, replyTo, JSON.stringify(attachments), sticker, Date.now());
     const id = Number(result.lastInsertRowid);
     emitMessage('message:new', channel, id);
+    notifyForMessage(userId, channel, id, content, replyTo);
+    // Forum lists sort by latest activity, so tell the forum a post moved.
+    if (channel.kind === 'thread' && channel.parent_id) {
+      rt.toChannel(channel.parent_id, 'thread:update', { forumId: channel.parent_id, bumped: channel.id });
+    }
     const [message] = serializeMessages(rt.ctx, userId, [getMessageRow(db, id)!]);
     res.status(201).json({ message });
   });

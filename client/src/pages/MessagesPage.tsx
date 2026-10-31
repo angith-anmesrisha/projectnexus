@@ -161,14 +161,14 @@ function ProfileSide({ user }: { user: User }) {
   );
 }
 
-export function MemberRow({ user, role }: { user: User; role?: string }) {
+export function MemberRow({ user, role, color }: { user: User; role?: string; color?: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button className={`member ${user.presence === 'offline' ? 'off' : ''}`} onClick={() => setOpen(true)}>
         <Avatar user={user} size={34} />
         <span className="member-text">
-          <span className="member-name" style={{ color: role === 'owner' ? '#fcd34d' : undefined }}>
+          <span className="member-name" style={{ color: color ?? (role === 'owner' ? '#fcd34d' : undefined) }}>
             {user.displayName}
             {role && role !== 'member' && <span className={`role-pill role-${role}`}>{role}</span>}
           </span>

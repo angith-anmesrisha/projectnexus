@@ -335,3 +335,170 @@ describe('realtime', () => {
     await assert.rejects(new Client('nobody').socket());
   });
 });
+
+describe('phase 2: notifications, search, roles, forums, events', () => {
+  test('mentions, replies and friend requests land in the inbox, live', async () => {
+    const a = await new Client('notif_a').register();
+    const b = await new Client('notif_b').register();
+    const sb = await b.socket();
+    const req = once(sb, 'notification:new');
+    await a.call('POST', '/api/friends/requests', { username: 'notif_b' });
+    const pushed = await req;
+    assert.equal(pushed.notification.kind, 'friend_request');
+    assert.equal(pushed.unread, 1);
+
+    const community = (await a.call('POST', '/api/communities', { name: 'Pings' })).body.community;
+    await b.call('POST', `/api/communities/${community.id}/join`);
+    const general = community.channels.find((c: any) => c.name === 'general');
+    const mention = once(sb, 'notification:new');
+    const msg = (await a.call('POST', `/api/channels/${general.id}/messages`, { content: 'hey @notif_b, scrim?' })).body.message;
+    assert.equal((await mention).notification.kind, 'mention');
+
+    // Replying to your own message never notifies you; replying to theirs does.
+    const own = (await b.call('POST', `/api/channels/${general.id}/messages`, { content: 'sure' })).body.message;
+    await a.call('POST', `/api/channels/${general.id}/messages`, { content: 'nice', replyToId: own.id });
+    await b.call('POST', `/api/channels/${general.id}/messages`, { content: 'self reply', replyToId: own.id });
+
+    // @everyone needs the permission: B can't, A (owner) can.
+    await b.call('POST', `/api/channels/${general.id}/messages`, { content: '@everyone look' });
+    const inboxA = (await a.call('GET', '/api/notifications')).body;
+    assert.equal(inboxA.notifications.filter((n: any) => n.kind === 'mention').length, 0);
+
+    const inbox = (await b.call('GET', '/api/notifications')).body;
+    assert.deepEqual(
+      inbox.notifications.map((n: any) => n.kind),
+      ['reply', 'mention', 'friend_request'],
+    );
+    assert.equal(inbox.notifications[1].messageId, msg.id);
+    assert.equal(inbox.unread, 3);
+    assert.equal((await b.call('POST', '/api/notifications/read', { ids: [inbox.notifications[0].id] })).body.unread, 2);
+    assert.equal((await b.call('POST', '/api/notifications/read', {})).body.unread, 0);
+    sb.close();
+  });
+
+  test('search only covers channels you can read', async () => {
+    const a = await new Client('search_a').register();
+    const b = await new Client('search_b').register();
+    const c = await new Client('search_c').register();
+    const community = (await a.call('POST', '/api/communities', { name: 'Searchers' })).body.community;
+    await b.call('POST', `/api/communities/${community.id}/join`);
+    const general = community.channels.find((ch: any) => ch.name === 'general');
+    await a.call('POST', `/api/channels/${general.id}/messages`, { content: 'the secret rotation is B long' });
+    await b.call('POST', `/api/channels/${general.id}/messages`, { content: 'rotation sounds good https://example.com' });
+
+    const r = (await b.call('GET', '/api/search?q=rotation')).body;
+    assert.equal(r.messages.length, 2);
+    assert.equal(r.places[general.id].communityName, 'Searchers');
+    assert.equal((await b.call('GET', '/api/search?q=rotation&from=search_a')).body.messages.length, 1);
+    assert.equal((await b.call('GET', '/api/search?has=link')).body.messages.length, 1);
+    assert.equal((await b.call('GET', '/api/search?q=secret%20long')).body.messages.length, 1);
+    assert.equal((await c.call('GET', '/api/search?q=rotation')).body.messages.length, 0);
+    assert.equal((await c.call('GET', '/api/search')).status, 400);
+  });
+
+  test('custom roles grant permissions without escalation', async () => {
+    const owner = await new Client('role_owner').register();
+    const mod = await new Client('role_mod').register();
+    const pleb = await new Client('role_pleb').register();
+    const community = (await owner.call('POST', '/api/communities', { name: 'Ranked' })).body.community;
+    await mod.call('POST', `/api/communities/${community.id}/join`);
+    await pleb.call('POST', `/api/communities/${community.id}/join`);
+
+    // Members can't make channels until a role lets them.
+    assert.equal((await mod.call('POST', `/api/communities/${community.id}/channels`, { name: 'nope' })).status, 403);
+    const role = (
+      await owner.call('POST', `/api/communities/${community.id}/roles`, {
+        name: 'Coach',
+        color: '#ff8800',
+        permissions: 2 | 4 | 8, // channels, roles, messages
+        hoist: true,
+      })
+    ).body.role;
+    assert.equal(role.name, 'Coach');
+    const assigned = await owner.call('PUT', `/api/communities/${community.id}/members/${mod.id}/roles`, { roleIds: [role.id] });
+    assert.deepEqual(assigned.body.community.members.find((m: any) => m.id === mod.id).roleIds, [role.id]);
+    assert.equal((await mod.call('POST', `/api/communities/${community.id}/channels`, { name: 'vods' })).status, 201);
+
+    // A coach can't hand out kick rights they don't have, or edit up their own role.
+    const kicky = await mod.call('POST', `/api/communities/${community.id}/roles`, { name: 'Bouncer', permissions: 16 });
+    assert.equal(kicky.status, 403);
+    assert.equal((await mod.call('PATCH', `/api/roles/${role.id}`, { permissions: 2 | 4 | 8 | 16 })).status, 403);
+    assert.equal((await mod.call('DELETE', `/api/communities/${community.id}/members/${pleb.id}`)).status, 403);
+
+    // Message moderation follows the role.
+    const general = community.channels.find((c: any) => c.name === 'general');
+    const m = (await pleb.call('POST', `/api/channels/${general.id}/messages`, { content: 'spam' })).body.message;
+    assert.equal((await mod.call('DELETE', `/api/messages/${m.id}`)).status, 200);
+
+    // Deleting the role removes the access again.
+    assert.equal((await owner.call('DELETE', `/api/roles/${role.id}`)).status, 200);
+    assert.equal((await mod.call('POST', `/api/communities/${community.id}/channels`, { name: 'again' })).status, 403);
+  });
+
+  test('forums hold posts with their own replies', async () => {
+    const a = await new Client('forum_a').register();
+    const b = await new Client('forum_b').register();
+    const outsider = await new Client('forum_x').register();
+    const community = (await a.call('POST', '/api/communities', { name: 'Guides' })).body.community;
+    await b.call('POST', `/api/communities/${community.id}/join`);
+    const forum = (await a.call('POST', `/api/communities/${community.id}/channels`, { name: 'guides', kind: 'forum' })).body.channel;
+    assert.equal(forum.kind, 'forum');
+    assert.equal((await a.call('POST', `/api/channels/${forum.id}/messages`, { content: 'hi' })).status, 400);
+
+    const sb = await b.socket();
+    const live = once(sb, 'thread:update');
+    const post = (await a.call('POST', `/api/channels/${forum.id}/threads`, { title: 'Smoke lineups', content: 'Here are mine' })).body.thread;
+    assert.equal((await live).thread.id, post.id);
+    assert.equal(post.title, 'Smoke lineups');
+
+    assert.equal((await b.call('POST', `/api/channels/${post.id}/messages`, { content: 'saving this' })).status, 201);
+    const list = (await b.call('GET', `/api/channels/${forum.id}/threads`)).body.threads;
+    assert.equal(list.length, 1);
+    assert.equal(list[0].replies, 1);
+    assert.equal(list[0].preview, 'Here are mine');
+
+    // Posts don't clutter the channel list, and outsiders can't read them.
+    const detail = (await b.call('GET', `/api/communities/${community.id}`)).body.community;
+    assert.ok(!detail.channels.some((c: any) => c.kind === 'thread'));
+    assert.equal((await outsider.call('GET', `/api/channels/${post.id}/messages`)).status, 404);
+
+    // Only the author (or a moderator) can delete a post.
+    assert.equal((await b.call('DELETE', `/api/channels/${post.id}`)).status, 403);
+    assert.equal((await a.call('DELETE', `/api/channels/${post.id}`)).status, 200);
+    sb.close();
+  });
+
+  test('events with RSVPs', async () => {
+    const a = await new Client('event_a').register();
+    const b = await new Client('event_b').register();
+    const community = (await a.call('POST', '/api/communities', { name: 'Cup' })).body.community;
+    await b.call('POST', `/api/communities/${community.id}/join`);
+    const startsAt = Date.now() + 86_400_000;
+    assert.equal((await b.call('POST', `/api/communities/${community.id}/events`, { title: 'Nope', startsAt })).status, 403);
+    assert.equal((await a.call('POST', `/api/communities/${community.id}/events`, { title: 'Past', startsAt: Date.now() - 86_400_000 })).status, 400);
+    const ev = (
+      await a.call('POST', `/api/communities/${community.id}/events`, {
+        title: 'Friday Cup',
+        description: '5v5 bracket',
+        location: '#general',
+        startsAt,
+        endsAt: startsAt + 3 * 3_600_000,
+      })
+    ).body.event;
+    assert.equal(ev.going, 1);
+    assert.equal(ev.myRsvp, 'going');
+
+    const r = (await b.call('POST', `/api/events/${ev.id}/rsvp`, { status: 'interested' })).body.event;
+    assert.equal(r.interested, 1);
+    assert.equal(r.myRsvp, 'interested');
+    assert.equal(r.canManage, false);
+    const upcoming = (await b.call('GET', '/api/events')).body.events;
+    assert.equal(upcoming[0].title, 'Friday Cup');
+    const inbox = (await b.call('GET', '/api/notifications')).body.notifications;
+    assert.equal(inbox[0].kind, 'event');
+
+    assert.equal((await b.call('DELETE', `/api/events/${ev.id}`)).status, 403);
+    assert.equal((await a.call('DELETE', `/api/events/${ev.id}`)).status, 200);
+    assert.equal((await b.call('GET', `/api/communities/${community.id}/events`)).body.events.length, 0);
+  });
+});

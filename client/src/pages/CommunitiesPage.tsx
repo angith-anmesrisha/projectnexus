@@ -1,12 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, NavLink, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { CalendarDays, Compass, DoorOpen, Hash, Link2, Megaphone, MessageSquareText, Plus, Settings, Trophy, UserPlus, Volume2 } from 'lucide-react';
+import { CalendarDays, Compass, DoorOpen, Hash, Link2, Megaphone, MessagesSquare, Plus, Settings, Trophy, UserPlus, Volume2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useNexus } from '../lib/store';
-import type { Channel, Community } from '../lib/types';
+import { can, type Channel, type Community, type Member } from '../lib/types';
 import { CommunityBadge } from '../components/Avatar';
 import { ChatView } from '../components/ChatView';
+import { EventsView } from '../components/EventsView';
+import { ForumView } from '../components/ForumView';
 import { Modal } from '../components/Modal';
+import { RolesPanel, topRole } from '../components/RolesPanel';
 import { MemberRow } from './MessagesPage';
 
 const ACCENTS = ['#8b5cf6', '#22d3ee', '#f43f5e', '#f59e0b', '#10b981', '#ec4899', '#3b82f6', '#a3ff12'];
@@ -48,9 +51,10 @@ export function CommunitiesPage() {
     const first = community.channels.find((c) => c.kind === 'text') ?? community.channels[0];
     return <Navigate to={`/communities/${community.id}/${first.id}`} replace />;
   }
+  const isEvents = channelId === 'events';
   const channel = community?.channels.find((c) => c.id === channelId);
-  if (community && channelId && !channel) return <Navigate to={`/communities/${community.id}`} replace />;
-  const isMod = community?.role === 'owner' || community?.role === 'admin';
+  if (community && channelId && !channel && !isEvents) return <Navigate to={`/communities/${community.id}`} replace />;
+  const canManageMessages = can(community, 'manageMessages');
 
   const modals = (
     <>
@@ -76,10 +80,14 @@ export function CommunitiesPage() {
   return (
     <div className="workspace has-chat">
       <aside className="context glass">
-        {community ? <CommunitySidebar community={community} isMod={isMod} onModal={setModal} /> : <p className="muted pad">{error || 'Loading…'}</p>}
+        {community ? <CommunitySidebar community={community} onModal={setModal} /> : <p className="muted pad">{error || 'Loading…'}</p>}
       </aside>
       <section className="main glass">
-        {community && channel ? (
+        {community && isEvents ? (
+          <EventsView community={community} />
+        ) : community && channel?.kind === 'forum' ? (
+          <ForumView key={channel.id} community={community} forum={channel} aside={<MemberList community={community} />} />
+        ) : community && channel ? (
           <ChatView
             key={channel.id}
             kind="channel"
@@ -87,10 +95,11 @@ export function CommunitiesPage() {
             title={channel.name}
             icon={channel.kind === 'announcement' ? <Megaphone size={20} /> : <Hash size={20} />}
             topic={channel.topic}
-            lockedReason={channel.kind === 'announcement' && !isMod ? 'Only admins can post announcements here.' : undefined}
-            canModerate={isMod}
-            canPin={isMod}
+            lockedReason={channel.kind === 'announcement' && !can(community, 'postAnnouncements') ? 'Only admins can post announcements here.' : undefined}
+            canModerate={canManageMessages}
+            canPin={canManageMessages}
             members={community.members}
+            focusMessageId={Number(params.get('m')) || undefined}
             intro={
               <div className="intro">
                 <span className="intro-icon">{channel.kind === 'announcement' ? <Megaphone size={34} /> : <Hash size={34} />}</span>
@@ -114,7 +123,7 @@ export function CommunitiesPage() {
   );
 }
 
-function CommunitySidebar({ community, isMod, onModal }: { community: Community; isMod: boolean; onModal: (m: ModalKind) => void }) {
+function CommunitySidebar({ community, onModal }: { community: Community; onModal: (m: ModalKind) => void }) {
   const { unread, removeCommunity } = useNexus();
   const navigate = useNavigate();
   const online = community.members.filter((m) => m.presence !== 'offline').length;
@@ -128,10 +137,11 @@ function CommunitySidebar({ community, isMod, onModal }: { community: Community;
 
   const link = (c: Channel) => (
     <NavLink key={c.id} to={`/communities/${community.id}/${c.id}`} className={`chan-link ${unread.has(c.id) ? 'unread' : ''}`}>
-      {c.kind === 'announcement' ? <Megaphone size={17} /> : <Hash size={17} />}
+      {c.kind === 'announcement' ? <Megaphone size={17} /> : c.kind === 'forum' ? <MessagesSquare size={17} /> : <Hash size={17} />}
       <span>{c.name}</span>
     </NavLink>
   );
+  const canSettings = can(community, 'manageCommunity') || can(community, 'manageRoles') || can(community, 'kickMembers');
 
   return (
     <>
@@ -145,12 +155,12 @@ function CommunitySidebar({ community, isMod, onModal }: { community: Community;
         </div>
       </div>
       <div className="community-tools">
-        {isMod && (
+        {can(community, 'createInvites') && (
           <button className="btn sm primary" onClick={() => onModal('invite')}>
             <UserPlus size={15} /> Invite
           </button>
         )}
-        {isMod && (
+        {canSettings && (
           <button className="icon-btn" onClick={() => onModal('settings')} aria-label="Community settings" data-tip="Settings">
             <Settings size={18} />
           </button>
@@ -164,7 +174,7 @@ function CommunitySidebar({ community, isMod, onModal }: { community: Community;
       <div className="ctx-list">
         <div className="ctx-section">
           <span>Channels</span>
-          {isMod && (
+          {can(community, 'manageChannels') && (
             <button className="icon-btn sm" onClick={() => onModal('channel')} aria-label="Create channel" data-tip="New channel">
               <Plus size={15} />
             </button>
@@ -172,27 +182,51 @@ function CommunitySidebar({ community, isMod, onModal }: { community: Community;
         </div>
         {community.channels.filter((c) => c.kind === 'announcement').map(link)}
         {community.channels.filter((c) => c.kind === 'text').map(link)}
+        {community.channels.some((c) => c.kind === 'forum') && <div className="ctx-section"><span>Forums</span></div>}
+        {community.channels.filter((c) => c.kind === 'forum').map(link)}
+        <div className="ctx-section"><span>Happening</span></div>
+        <NavLink to={`/communities/${community.id}/events`} className="chan-link">
+          <CalendarDays size={17} />
+          <span>Events</span>
+        </NavLink>
         <div className="ctx-section"><span>Coming soon</span></div>
         <span className="chan-link later"><Volume2 size={17} /><span>Voice lounges</span></span>
-        <span className="chan-link later"><MessageSquareText size={17} /><span>Forums</span></span>
-        <span className="chan-link later"><CalendarDays size={17} /><span>Events</span></span>
         <span className="chan-link later"><Trophy size={17} /><span>Tournaments</span></span>
       </div>
     </>
   );
 }
 
+/** Online members grouped by their highest hoisted role, then everyone else. */
 function MemberList({ community }: { community: Community }) {
   const order = { owner: 0, admin: 1, member: 2 };
   const sorted = [...community.members].sort((a, b) => order[a.role] - order[b.role] || a.displayName.localeCompare(b.displayName));
   const online = sorted.filter((m) => m.presence !== 'offline');
   const offline = sorted.filter((m) => m.presence === 'offline');
+  const hoisted = [...community.roles].filter((r) => r.hoist).sort((a, b) => b.position - a.position);
+  const groups: { label: string; color?: string; members: Member[] }[] = [];
+  const placed = new Set<string>();
+  for (const r of hoisted) {
+    const ms = online.filter((m) => !placed.has(m.id) && m.roleIds.includes(r.id));
+    ms.forEach((m) => placed.add(m.id));
+    if (ms.length) groups.push({ label: r.name, color: r.color || undefined, members: ms });
+  }
+  const rest = online.filter((m) => !placed.has(m.id));
+  if (rest.length) groups.push({ label: 'Online', members: rest });
+  const row = (m: Member) => {
+    const r = topRole(community, m);
+    return <MemberRow key={m.id} user={m} role={m.role} color={r?.color || undefined} />;
+  };
   return (
     <aside className="side-panel">
-      <div className="side-panel-head"><h3>Online · {online.length}</h3></div>
-      {online.map((m) => <MemberRow key={m.id} user={m} role={m.role} />)}
+      {groups.map((g) => (
+        <div key={g.label}>
+          <div className="side-panel-head"><h3 style={{ color: g.color }}>{g.label} · {g.members.length}</h3></div>
+          {g.members.map(row)}
+        </div>
+      ))}
       {offline.length > 0 && <div className="side-panel-head"><h3>Offline · {offline.length}</h3></div>}
-      {offline.map((m) => <MemberRow key={m.id} user={m} role={m.role} />)}
+      {offline.map(row)}
     </aside>
   );
 }
@@ -339,7 +373,7 @@ function CreateChannelModal({ community, onClose }: { community: Community; onCl
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
-  const [kind, setKind] = useState<'text' | 'announcement'>('text');
+  const [kind, setKind] = useState<'text' | 'announcement' | 'forum'>('text');
   const [error, setError] = useState('');
 
   async function submit(e: FormEvent) {
@@ -366,6 +400,11 @@ function CreateChannelModal({ community, onClose }: { community: Community; onCl
             <Megaphone size={20} />
             <strong>Announcement</strong>
             <span className="muted small">Only admins post</span>
+          </button>
+          <button type="button" className={`choice ${kind === 'forum' ? 'on' : ''}`} onClick={() => setKind('forum')}>
+            <MessagesSquare size={20} />
+            <strong>Forum</strong>
+            <span className="muted small">Posts with threads</span>
           </button>
         </div>
         <label className="field">
@@ -416,11 +455,18 @@ function InviteModal({ community, onClose }: { community: Community; onClose: ()
 function CommunitySettingsModal({ community, onClose }: { community: Community; onClose: () => void }) {
   const { me, setCommunityDetail, removeCommunity } = useNexus();
   const navigate = useNavigate();
+  const tabs = [
+    can(community, 'manageCommunity') && { id: 'overview', label: 'Overview' },
+    can(community, 'manageRoles') && { id: 'roles', label: 'Roles' },
+    (can(community, 'manageRoles') || can(community, 'kickMembers')) && { id: 'members', label: 'Members' },
+  ].filter(Boolean) as { id: 'overview' | 'roles' | 'members'; label: string }[];
+  const [tab, setTab] = useState(tabs[0]?.id ?? 'members');
   const [name, setName] = useState(community.name);
   const [game, setGame] = useState(community.game);
   const [description, setDescription] = useState(community.description);
   const [accent, setAccent] = useState(community.accent);
   const [error, setError] = useState('');
+  const [memberFilter, setMemberFilter] = useState('');
   const isOwner = community.role === 'owner';
 
   async function save(e: FormEvent) {
@@ -434,6 +480,7 @@ function CommunitySettingsModal({ community, onClose }: { community: Community; 
     }
   }
   async function run(fn: () => Promise<{ community: Community }>) {
+    setError('');
     try {
       setCommunityDetail((await fn()).community);
     } catch (err) {
@@ -447,45 +494,91 @@ function CommunitySettingsModal({ community, onClose }: { community: Community; 
     onClose();
     navigate('/communities');
   }
+  const toggleRole = (m: Member, roleId: string) =>
+    run(() =>
+      api.put(`/communities/${community.id}/members/${m.id}/roles`, {
+        roleIds: m.roleIds.includes(roleId) ? m.roleIds.filter((r) => r !== roleId) : [...m.roleIds, roleId],
+      }),
+    );
+  const needle = memberFilter.trim().toLowerCase();
+  const members = community.members.filter((m) => !needle || m.displayName.toLowerCase().includes(needle) || m.username.toLowerCase().includes(needle));
 
   return (
     <Modal title="Community settings" onClose={onClose} wide>
-      <form onSubmit={save} className="form">
-        <div className="form-2col">
-          <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={48} /></label>
-          <label className="field"><span>Main game</span><input value={game} onChange={(e) => setGame(e.target.value)} maxLength={40} /></label>
-        </div>
-        <label className="field"><span>Description</span><textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} /></label>
-        <ColorRow value={accent} onChange={setAccent} />
-        <div className="modal-actions"><button className="btn primary">Save changes</button></div>
-      </form>
-      <h4 className="side-label">Members and roles</h4>
-      <div className="role-list">
-        {community.members.map((m) => (
-          <div key={m.id} className="role-row">
-            <span className="role-name">{m.displayName} <span className="muted small">@{m.username}</span></span>
-            <span className={`role-pill role-${m.role}`}>{m.role}</span>
-            {isOwner && m.role !== 'owner' && (
-              <button className="btn ghost sm" onClick={() => run(() => api.patch(`/communities/${community.id}/members/${m.id}`, { role: m.role === 'admin' ? 'member' : 'admin' }))}>
-                {m.role === 'admin' ? 'Make member' : 'Make admin'}
-              </button>
-            )}
-            {m.id !== me.id && m.role !== 'owner' && (isOwner || m.role === 'member') && (
-              <button className="btn danger-ghost sm" onClick={() => run(() => api.del(`/communities/${community.id}/members/${m.id}`))}>Remove</button>
-            )}
-          </div>
-        ))}
-      </div>
-      {error && <p className="form-error">{error}</p>}
-      {isOwner && (
-        <div className="danger-zone">
-          <div>
-            <strong>Delete community</strong>
-            <p className="muted small">Removes every channel and message for everyone.</p>
-          </div>
-          <button className="btn danger" onClick={destroy}>Delete</button>
+      {tabs.length > 1 && (
+        <div className="seg settings-tabs" role="tablist">
+          {tabs.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
         </div>
       )}
+
+      {tab === 'overview' && (
+        <>
+          <form onSubmit={save} className="form">
+            <div className="form-2col">
+              <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={48} /></label>
+              <label className="field"><span>Main game</span><input value={game} onChange={(e) => setGame(e.target.value)} maxLength={40} /></label>
+            </div>
+            <label className="field"><span>Description</span><textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} /></label>
+            <ColorRow value={accent} onChange={setAccent} />
+            <div className="modal-actions"><button className="btn primary">Save changes</button></div>
+          </form>
+          {isOwner && (
+            <div className="danger-zone">
+              <div>
+                <strong>Delete community</strong>
+                <p className="muted small">Removes every channel and message for everyone.</p>
+              </div>
+              <button className="btn danger" onClick={destroy}>Delete</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'roles' && <RolesPanel community={community} />}
+
+      {tab === 'members' && (
+        <>
+          <input className="member-filter" value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} placeholder="Find a member" aria-label="Find a member" />
+          <div className="role-list">
+            {members.map((m) => (
+              <div key={m.id} className="role-row">
+                <span className="role-name" style={{ color: topRole(community, m)?.color || undefined }}>
+                  {m.displayName} <span className="muted small">@{m.username}</span>
+                </span>
+                {m.role !== 'member' && <span className={`role-pill role-${m.role}`}>{m.role}</span>}
+                {can(community, 'manageRoles') && community.roles.length > 0 && (
+                  <span className="role-toggles">
+                    {[...community.roles].sort((a, b) => b.position - a.position).map((r) => (
+                      <button
+                        key={r.id}
+                        className={`role-chip ${m.roleIds.includes(r.id) ? 'on' : ''}`}
+                        style={{ ['--rc' as string]: r.color || 'var(--text-3)' }}
+                        onClick={() => toggleRole(m, r.id)}
+                        aria-pressed={m.roleIds.includes(r.id)}
+                      >
+                        <i /> {r.name}
+                      </button>
+                    ))}
+                  </span>
+                )}
+                {isOwner && m.role !== 'owner' && (
+                  <button className="btn ghost sm" onClick={() => run(() => api.patch(`/communities/${community.id}/members/${m.id}`, { role: m.role === 'admin' ? 'member' : 'admin' }))}>
+                    {m.role === 'admin' ? 'Remove admin' : 'Make admin'}
+                  </button>
+                )}
+                {can(community, 'kickMembers') && m.id !== me.id && m.role !== 'owner' && (isOwner || m.role === 'member') && (
+                  <button className="btn danger-ghost sm" onClick={() => run(() => api.del(`/communities/${community.id}/members/${m.id}`))}>Remove</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {error && <p className="form-error">{error}</p>}
     </Modal>
   );
 }

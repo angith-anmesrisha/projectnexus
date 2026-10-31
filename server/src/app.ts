@@ -10,6 +10,8 @@ import { authRoutes } from './routes/auth.ts';
 import { communityRoutes } from './routes/communities.ts';
 import { messageRoutes } from './routes/messages.ts';
 import { appearanceRoutes } from './routes/appearance.ts';
+import { inboxRoutes } from './routes/inbox.ts';
+import { eventRoutes } from './routes/events.ts';
 import { mediaRoutes, uploadsStatic } from './routes/media.ts';
 import { userRoutes } from './routes/users.ts';
 
@@ -45,6 +47,8 @@ export function createNexus(opts: AppOptions) {
   authed.use(messageRoutes(rt));
   authed.use(mediaRoutes(rt, opts.uploadDir));
   authed.use(appearanceRoutes(rt));
+  authed.use(inboxRoutes(rt));
+  authed.use(eventRoutes(rt));
   app.use('/api', authed);
   app.use('/uploads', uploadsStatic(opts.uploadDir));
   app.use('/api', (_req, _res, next) => next(notFound('No such API route')));

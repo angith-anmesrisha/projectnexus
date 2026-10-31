@@ -189,6 +189,7 @@ export function serializeChannel(c: ChannelRow) {
     name: c.name,
     topic: c.topic,
     position: c.position,
+    parentId: c.parent_id ?? null,
   };
 }
 

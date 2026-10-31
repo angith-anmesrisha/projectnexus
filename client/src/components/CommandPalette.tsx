@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Hash, Megaphone, MessageCircle, Palette, Search, Sparkles, User } from 'lucide-react';
+import { Bell, Hash, Megaphone, MessageCircle, MessagesSquare, Palette, Search, Sparkles, User } from 'lucide-react';
 import { api } from '../lib/api';
 import { PRESETS, applyPreset } from '../lib/appearance';
 import { useAppearance } from '../lib/appearanceStore';
@@ -18,7 +18,7 @@ interface Item {
 }
 
 /** Ctrl+K quick switcher for conversations, channels, pages and actions. */
-export function CommandPalette({ onClose }: { onClose: () => void }) {
+export function CommandPalette({ onClose, onSearch }: { onClose: () => void; onSearch?: () => void }) {
   const { conversations, communities, communityDetails, friends, upsertConversation } = useNexus();
   const { update, plugin, setPlugin } = useAppearance();
   const navigate = useNavigate();
@@ -63,13 +63,15 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           id: `ch-${ch.id}`,
           label: ch.name,
           hint: c.name,
-          icon: ch.kind === 'announcement' ? <Megaphone size={18} /> : <Hash size={18} />,
+          icon: ch.kind === 'announcement' ? <Megaphone size={18} /> : ch.kind === 'forum' ? <MessagesSquare size={18} /> : <Hash size={18} />,
           run: go(`/communities/${c.id}/${ch.id}`),
         });
       }
     }
     list.push(
+      ...(onSearch ? [{ id: 'a-search', label: 'Search messages', hint: 'Ctrl F', icon: <Search size={18} />, run: onSearch }] : []),
       { id: 'p-home', label: 'Home', hint: 'Page', icon: <Sparkles size={18} />, run: go('/') },
+      { id: 'p-inbox', label: 'Inbox', hint: 'Mentions, replies, friends and events', icon: <Bell size={18} />, run: go('/notifications') },
       { id: 'p-discover', label: 'Discover communities', hint: 'Page', icon: <Search size={18} />, run: go('/discover') },
       { id: 'p-friends', label: 'Friends', hint: 'Page', icon: <User size={18} />, run: go('/messages') },
       { id: 'p-studio', label: 'Customisation studio', hint: 'Themes, layout, plugins, CSS', icon: <Palette size={18} />, run: go('/studio') },

@@ -22,6 +22,8 @@ import { useNexus } from '../lib/store';
 import type { Me, Status } from '../lib/types';
 import { Avatar, CommunityBadge } from './Avatar';
 import { CommandPalette } from './CommandPalette';
+import { SearchModal } from './SearchModal';
+import { Toasts } from './Toasts';
 
 const NAV: { to: string; label: string; icon: LucideIcon; soon?: boolean }[] = [
   { to: '/', label: 'Home', icon: House },
@@ -31,7 +33,7 @@ const NAV: { to: string; label: string; icon: LucideIcon; soon?: boolean }[] = [
   { to: '/feed', label: 'Feed', icon: Clapperboard, soon: true },
   { to: '/news', label: 'News', icon: Newspaper, soon: true },
   { to: '/tournaments', label: 'Tournaments', icon: Trophy, soon: true },
-  { to: '/notifications', label: 'Inbox', icon: Bell, soon: true },
+  { to: '/notifications', label: 'Inbox', icon: Bell },
 ];
 
 const STATUS: { value: Status; label: string }[] = [
@@ -42,9 +44,10 @@ const STATUS: { value: Status; label: string }[] = [
 ];
 
 export function Shell() {
-  const { me, setMe, unread, conversations, communities, communityDetails, friends, connected, logout } = useNexus();
+  const { me, setMe, unread, conversations, communities, communityDetails, friends, connected, logout, notificationsUnread } = useNexus();
   const { appearance, plugin, setPlugin } = useAppearance();
   const [palette, setPalette] = useState(false);
+  const [search, setSearch] = useState(false);
   const [meMenu, setMeMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
@@ -56,6 +59,11 @@ export function Shell() {
       if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPalette((v) => !v);
+      }
+      if (mod && !e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setPalette(false);
+        setSearch(true);
       }
       if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
@@ -78,7 +86,7 @@ export function Shell() {
   }, [meMenu]);
 
   const dmUnread = conversations.filter((c) => unread.has(c.id)).length;
-  const badges: Record<string, number> = { '/messages': friends.incoming.length + dmUnread };
+  const badges: Record<string, number> = { '/messages': friends.incoming.length + dmUnread, '/notifications': notificationsUnread };
   const communityUnread = (id: string) => communityDetails[id]?.channels.some((ch) => unread.has(ch.id));
 
   async function setStatus(status: Status) {
@@ -99,7 +107,7 @@ export function Shell() {
         <NavLink to="/" className="dock-logo" aria-label="Nexus home">
           <span className="logo-mark" />
         </NavLink>
-        <button className="dock-item search-trigger" onClick={() => setPalette(true)} aria-label="Quick switcher (Ctrl+K)" data-tip="Jump to… Ctrl K">
+        <button className="dock-item search-trigger" onClick={() => setSearch(true)} aria-label="Search messages (Ctrl+F)" data-tip="Search · Ctrl F">
           <span className="dock-glyph"><Search size={20} /></span>
           <span className="dock-label">Search</span>
         </button>
@@ -176,7 +184,9 @@ export function Shell() {
         <Outlet />
       </main>
 
-      {palette && <CommandPalette onClose={() => setPalette(false)} />}
+      {palette && <CommandPalette onClose={() => setPalette(false)} onSearch={() => { setPalette(false); setSearch(true); }} />}
+      {search && <SearchModal onClose={() => setSearch(false)} />}
+      <Toasts />
     </div>
   );
 }

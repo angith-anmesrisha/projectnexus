@@ -35,6 +35,16 @@ Nexus brings together three experiences: **Connect** (friends, messaging, commun
 - Per-chat search, pinned messages panel, member panel, day dividers and jump to latest
 - Ctrl+K quick switcher for friends, chats, communities and channels
 
+**Inbox and search**
+- Inbox for mentions, replies, friend requests and events, with a live badge, toasts and filters
+- `@everyone` mentions for roles that are allowed to use them
+- Ctrl+F global search across every chat and community you're in, with from, has-link/image/GIF/file/sticker and community filters, jumping straight to the message
+
+**Forums, events and roles**
+- Forum channels: posts with titles, previews, images and their own reply threads, sorted by activity
+- Community events with date, length, location, Going/Interested RSVPs, live and countdown badges, and an upcoming list on Home
+- Custom roles with colours, separate member list groups, ordering and nine permissions (edit community, channels, roles, moderate, kick, invite, events, @everyone, announcements). Nobody can grant a permission they don't have
+
 **Customisation Studio** (Ctrl+,)
 - Nine themes, plus full control over accent colours, background, panels, text, light or dark mode
 - Wallpapers (aurora, neon grid, mesh, solid or your own image), dimming, panel opacity and glass blur
@@ -111,8 +121,7 @@ client/
 
 ## Next up
 
-- Global message search, notifications inbox and per-community notification settings
+- Per-community notification settings
 - Voice rooms, calls and screen sharing (WebRTC)
-- Forums, events and custom roles and permissions
 - Discover feed with clips and permitted video embeds
 - News aggregation, teammate search and tournaments
