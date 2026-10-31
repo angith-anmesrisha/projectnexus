@@ -7,6 +7,7 @@ import { can, type Channel, type Community, type Member } from '../lib/types';
 import { CommunityBadge } from '../components/Avatar';
 import { ChatView } from '../components/ChatView';
 import { EventsView } from '../components/EventsView';
+import { TournamentList } from '../components/Tournaments';
 import { ForumView } from '../components/ForumView';
 import { Modal } from '../components/Modal';
 import { RolesPanel, topRole } from '../components/RolesPanel';
@@ -56,8 +57,9 @@ export function CommunitiesPage() {
     return <Navigate to={`/communities/${community.id}/${first.id}`} replace />;
   }
   const isEvents = channelId === 'events';
+  const isTournaments = channelId === 'tournaments';
   const channel = community?.channels.find((c) => c.id === channelId);
-  if (community && channelId && !channel && !isEvents) return <Navigate to={`/communities/${community.id}`} replace />;
+  if (community && channelId && !channel && !isEvents && !isTournaments) return <Navigate to={`/communities/${community.id}`} replace />;
   const canManageMessages = can(community, 'manageMessages');
 
   const modals = (
@@ -89,6 +91,8 @@ export function CommunitiesPage() {
       <section className="main glass">
         {community && isEvents ? (
           <EventsView community={community} />
+        ) : community && isTournaments ? (
+          <div className="page"><TournamentList communityId={community.id} /></div>
         ) : community && channel?.kind === 'voice' ? (
           <VoiceRoomView channelId={channel.id} name={channel.name} topic={channel.topic} members={community.members} communityName={community.name} />
         ) : community && channel?.kind === 'forum' ? (
@@ -199,8 +203,10 @@ function CommunitySidebar({ community, onModal }: { community: Community; onModa
           <CalendarDays size={17} />
           <span>Events</span>
         </NavLink>
-        <div className="ctx-section"><span>Coming soon</span></div>
-        <span className="chan-link later"><Trophy size={17} /><span>Tournaments</span></span>
+        <NavLink to={`/communities/${community.id}/tournaments`} className="chan-link">
+          <Trophy size={17} />
+          <span>Tournaments</span>
+        </NavLink>
       </div>
     </>
   );

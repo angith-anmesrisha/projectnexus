@@ -277,6 +277,86 @@ function addColumn(db: DB, table: string, column: string, definition: string) {
   if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
+const SCHEMA_V5 = `
+-- Compete: teams and community tournaments.
+CREATE TABLE IF NOT EXISTS teams (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  tag        TEXT NOT NULL,
+  game       TEXT NOT NULL DEFAULT '',
+  bio        TEXT NOT NULL DEFAULT '',
+  accent     TEXT NOT NULL DEFAULT '#8b5cf6',
+  captain_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS team_members (
+  team_id   TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY (team_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS team_members_user ON team_members(user_id);
+CREATE TABLE IF NOT EXISTS team_invites (
+  team_id    TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invited_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (team_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS tournaments (
+  id                TEXT PRIMARY KEY,
+  community_id      TEXT NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  game              TEXT NOT NULL DEFAULT '',
+  description       TEXT NOT NULL DEFAULT '',
+  team_size         INTEGER NOT NULL DEFAULT 1,
+  max_entrants      INTEGER NOT NULL DEFAULT 16,
+  best_of           INTEGER NOT NULL DEFAULT 1,
+  starts_at         INTEGER NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'registration', -- registration | live | done
+  champion_entry_id TEXT,
+  created_by        TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at        INTEGER NOT NULL,
+  started_at        INTEGER,
+  finished_at       INTEGER
+);
+CREATE INDEX IF NOT EXISTS tournaments_community ON tournaments(community_id, starts_at);
+-- One entry per player or team. Team rosters are snapshotted into entry_players,
+-- whose key stops anyone from playing for two entries in the same tournament.
+CREATE TABLE IF NOT EXISTS tournament_entries (
+  id            TEXT PRIMARY KEY,
+  tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  owner_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  team_id       TEXT REFERENCES teams(id) ON DELETE SET NULL,
+  name          TEXT NOT NULL,
+  seed          INTEGER,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS tournament_entries_t ON tournament_entries(tournament_id);
+CREATE TABLE IF NOT EXISTS entry_players (
+  entry_id      TEXT NOT NULL REFERENCES tournament_entries(id) ON DELETE CASCADE,
+  tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (tournament_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS tournament_matches (
+  id            TEXT PRIMARY KEY,
+  tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  round         INTEGER NOT NULL,
+  slot          INTEGER NOT NULL,
+  a_entry       TEXT,
+  b_entry       TEXT,
+  winner_entry  TEXT,
+  score_a       INTEGER,
+  score_b       INTEGER,
+  status        TEXT NOT NULL DEFAULT 'pending', -- pending | done
+  disputed      INTEGER NOT NULL DEFAULT 0,
+  reported_by   TEXT,
+  updated_at    INTEGER,
+  UNIQUE (tournament_id, round, slot)
+);
+`;
+
 export function openDb(path: string): DB {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL;');
@@ -292,6 +372,7 @@ export function openDb(path: string): DB {
   addColumn(db, 'channels', 'parent_id', 'TEXT REFERENCES channels(id) ON DELETE CASCADE');
   db.exec('CREATE INDEX IF NOT EXISTS channels_parent ON channels(parent_id)');
   db.exec(SCHEMA_V4);
+  db.exec(SCHEMA_V5);
   return db;
 }
 

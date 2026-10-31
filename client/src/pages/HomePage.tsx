@@ -146,13 +146,13 @@ export function HomePage() {
             )}
 
             <article className="card span-3 roadmap-card">
-              <div className="card-head"><h3>New and coming</h3></div>
+              <div className="card-head"><h3>New on Nexus</h3></div>
               <div className="roadmap">
                 {[
                   { icon: Gamepad2, t: 'Teammate finder', d: 'Post what you play, fill your squad', to: '/lfg' },
                   { icon: Clapperboard, t: 'Clip feed', d: 'Vertical clips and montages', to: '/feed' },
-                  { icon: Newspaper, t: 'News', d: 'Patch notes for your games' },
-                  { icon: Trophy, t: 'Tournaments', d: 'Brackets inside communities' },
+                  { icon: Newspaper, t: 'News', d: 'Patch notes for your games', to: '/news' },
+                  { icon: Trophy, t: 'Tournaments', d: 'Teams and brackets inside communities', to: '/tournaments' },
                 ].map((r) => {
                   const body = (
                     <>

@@ -5,7 +5,7 @@ import { isBlockedEitherWay } from './access.ts';
 import type { Realtime } from './realtime.ts';
 import { getUser, publicUser, type Ctx } from './serialize.ts';
 
-export type NotificationKind = 'mention' | 'reply' | 'friend_request' | 'friend_accept' | 'event';
+export type NotificationKind = 'mention' | 'reply' | 'friend_request' | 'friend_accept' | 'event' | 'team_invite' | 'tournament';
 
 export interface NotificationRow {
   id: string;

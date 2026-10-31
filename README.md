@@ -63,6 +63,20 @@ Nexus brings together three experiences: **Connect** (friends, messaging, commun
 - Live board filtered by game and region; join or leave with one click and watch seats fill in real time
 - The host turns the squad into a group chat in one click, and late joiners are added to it automatically
 
+**Teams and tournaments**
+- Teams with a name, tag, colour and game; captains invite friends, hand over the captaincy, remove players or disband
+- Tournaments inside communities, run by anyone with the events permission: solo or team format, 4 to 64 entrants, best of 1 to 7
+- Captains register their whole roster, and nobody can play for two entries in the same tournament
+- One click draws a single-elimination bracket with random seeds, and byes go to the top seeds
+- Players report their own matches; the opponent can dispute, and organisers can correct any result until the next match is played
+- Live bracket, champion banner, inbox updates when a tournament starts, results come in and a champion is crowned
+
+**News**
+- Patch notes, updates and esports stories for the games on your profile, from each game's official Steam news feed
+- Filter by game and by patch notes, esports or news; every story links to the original source
+- Games without a Steam feed (Valorant, League of Legends, Fortnite and others) link to their official news page
+- Cached for 15 minutes per game; if a feed is down, the last good copy is shown with a notice
+
 **Customisation Studio** (Ctrl+,)
 - Nine themes, plus full control over accent colours, background, panels, text, light or dark mode
 - Wallpapers (aurora, neon grid, mesh, solid or your own image), dimming, panel opacity and glass blur
@@ -83,7 +97,6 @@ Nexus brings together three experiences: **Connect** (friends, messaging, commun
 
 **Navigation**
 - Home, Discover, Messages, Communities, Feed, Teammates, News, Tournaments and Inbox
-- News and Tournaments are placeholders describing what is coming
 
 Every permission is enforced on the server. Private channels answer 404 to non-members so their ids cannot be probed.
 
@@ -128,18 +141,19 @@ server/
     access.ts        Authorization rules for channels, messages and communities
     realtime.ts      Socket.IO rooms, presence and typing
     serialize.ts     API response shapes
-    routes/          auth, users, communities, messages, inbox, events, feed, lfg, media
+    routes/          auth, users, communities, messages, inbox, events, feed, lfg, teams, tournaments, news, media
+    news.ts          Steam news fetcher with caching
   test/              node:test suite
 client/
   src/
     lib/             API client, socket, app state, types
     components/      Shell, ChatView, ProfileModal and shared UI
-    pages/           Home, Messages, Communities, Discover, Feed, LFG, Studio, placeholders
+    pages/           Home, Messages, Communities, Discover, Feed, LFG, Tournaments, News, Studio
 ```
 
 ## Next up
 
 - Per-community notification settings
 - An SFU for large voice rooms and stage events
-- Teams and tournaments with brackets
-- News for the games you play
+- Double elimination and round-robin formats, check-in and match scheduling
+- Esports results and more news sources

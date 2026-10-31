@@ -651,3 +651,200 @@ describe('phase 4a: clip feed and teammate finder', () => {
     sp1.close();
   });
 });
+
+describe('phase 4b: teams and tournaments', () => {
+  test('seeding puts byes next to the top seeds', async () => {
+    const { seedOrder, bracketSize } = await import('../src/routes/tournaments.ts');
+    assert.deepEqual(seedOrder(8), [1, 8, 4, 5, 2, 7, 3, 6]);
+    assert.equal(bracketSize(2), 2);
+    assert.equal(bracketSize(5), 8);
+    assert.equal(bracketSize(16), 16);
+  });
+
+  test('teams: invites, accept, captaincy and leaving', async () => {
+    const cap = await new Client('team_cap').register();
+    const p2 = await new Client('team_p2').register();
+    const p3 = await new Client('team_p3').register();
+    assert.equal((await cap.call('POST', '/api/teams', { name: 'Night Owls', tag: 'no!' })).status, 400);
+    const team = (await cap.call('POST', '/api/teams', { name: 'Night Owls', tag: 'nite', game: 'Valorant' })).body.team;
+    assert.equal(team.tag, 'NITE');
+    assert.equal(team.myRole, 'captain');
+    const sp = await p2.socket();
+    const note = once(sp, 'notification:new');
+    await cap.call('POST', `/api/teams/${team.id}/invites`, { userId: p2.id });
+    assert.equal((await note).notification.kind, 'team_invite');
+    await cap.call('POST', `/api/teams/${team.id}/invites`, { userId: p3.id });
+    assert.equal((await p2.call('POST', `/api/teams/${team.id}/invites`, { userId: p3.id })).status, 403);
+    const mine = (await p2.call('GET', '/api/teams/mine')).body.teams;
+    assert.equal(mine[0].myRole, 'invited');
+    assert.equal((await p2.call('POST', `/api/teams/${team.id}/accept`)).body.team.members.length, 2);
+    await p3.call('POST', `/api/teams/${team.id}/decline`);
+    assert.equal((await p3.call('POST', `/api/teams/${team.id}/accept`)).status, 404);
+    // The captain can't walk away from a roster.
+    assert.equal((await cap.call('POST', `/api/teams/${team.id}/leave`)).status, 400);
+    await cap.call('POST', `/api/teams/${team.id}/captain`, { userId: p2.id });
+    assert.equal((await cap.call('POST', `/api/teams/${team.id}/leave`)).status, 200);
+    const after = (await p2.call('GET', `/api/teams/${team.id}`)).body.team;
+    assert.equal(after.captainId, p2.id);
+    assert.equal(after.members.length, 1);
+    sp.close();
+  });
+
+  test('solo tournament: registration, bracket with byes, reporting, disputes and a champion', async () => {
+    const org = await new Client('cup_org').register();
+    const players = await Promise.all(['cup_p1', 'cup_p2', 'cup_p3', 'cup_p4', 'cup_p5'].map((n) => new Client(n).register()));
+    const outsider = await new Client('cup_out').register();
+    const c = (await org.call('POST', '/api/communities', { name: 'Cup Town', game: 'Valorant' })).body.community;
+    for (const p of players) await p.call('POST', `/api/communities/${c.id}/join`);
+    // Members without the events permission can't run tournaments.
+    assert.equal((await players[0].call('POST', `/api/communities/${c.id}/tournaments`, { name: 'Nope', startsAt: Date.now() + 3600e3 })).status, 403);
+    const t = (
+      await org.call('POST', `/api/communities/${c.id}/tournaments`, { name: 'Friday Cup', game: 'Valorant', maxEntrants: 8, startsAt: Date.now() + 3600e3 })
+    ).body.tournament;
+    assert.equal(t.status, 'registration');
+    assert.equal((await outsider.call('GET', `/api/tournaments/${t.id}`)).status, 404);
+    for (const p of players) assert.equal((await p.call('POST', `/api/tournaments/${t.id}/register`)).status, 201);
+    assert.equal((await players[0].call('POST', `/api/tournaments/${t.id}/register`)).status, 409);
+    assert.equal((await players[0].call('POST', `/api/tournaments/${t.id}/start`)).status, 403);
+
+    const started = (await org.call('POST', `/api/tournaments/${t.id}/start`)).body.tournament;
+    assert.equal(started.status, 'live');
+    assert.equal(started.rounds, 3);
+    assert.equal(started.matches.length, 7);
+    // 5 entrants in an 8 bracket: 3 byes go through, one real first-round match.
+    const r0 = started.matches.filter((m: any) => m.round === 0);
+    assert.equal(r0.filter((m: any) => m.status === 'done').length, 3);
+    assert.equal((await players[0].call('POST', `/api/tournaments/${t.id}/register`)).status, 409);
+
+    const clientFor = (entryId: string) => {
+      const owner = started.entries.find((e: any) => e.id === entryId).ownerId;
+      return players.find((p) => p.id === owner)!;
+    };
+    const live = async () => (await org.call('GET', `/api/tournaments/${t.id}`)).body.tournament;
+
+    // Play out the first round: the winner (side a) reports.
+    const real = r0.find((m: any) => m.status === 'pending');
+    const other = players.find((p) => p !== clientFor(real.a) && p !== clientFor(real.b))!;
+    assert.equal((await other.call('POST', `/api/tournaments/${t.id}/matches/${real.id}/report`, { winner: real.a })).status, 403);
+    assert.equal(
+      (await clientFor(real.a).call('POST', `/api/tournaments/${t.id}/matches/${real.id}/report`, { winner: real.a, scoreA: 0, scoreB: 2 })).status,
+      400,
+    );
+    assert.equal((await clientFor(real.a).call('POST', `/api/tournaments/${t.id}/matches/${real.id}/report`, { winner: real.a, scoreA: 13, scoreB: 7 })).status, 200);
+    // Players can't change a reported result, but the opponent can dispute it.
+    assert.equal((await clientFor(real.b).call('POST', `/api/tournaments/${t.id}/matches/${real.id}/report`, { winner: real.b })).status, 409);
+    assert.equal((await clientFor(real.b).call('POST', `/api/tournaments/${t.id}/matches/${real.id}/dispute`)).status, 200);
+    let state = await live();
+    assert.equal(state.matches.find((m: any) => m.id === real.id).disputed, true);
+    // The organiser overturns it; the winner moves in the next round too.
+    await org.call('POST', `/api/tournaments/${t.id}/matches/${real.id}/report`, { winner: real.b, scoreA: 7, scoreB: 13 });
+    state = await live();
+    const fixed = state.matches.find((m: any) => m.id === real.id);
+    assert.equal(fixed.winner, real.b);
+    assert.equal(fixed.disputed, false);
+    const next = state.matches.find((m: any) => m.round === 1 && m.slot === Math.floor(real.slot / 2));
+    assert.ok([next.a, next.b].includes(real.b));
+    assert.ok(![next.a, next.b].includes(real.a));
+
+    // Organiser plays out the rest: side a always wins.
+    for (let r = 1; r < 3; r++) {
+      for (const m of state.matches.filter((m: any) => m.round === r)) {
+        assert.equal((await org.call('POST', `/api/tournaments/${t.id}/matches/${m.id}/report`, { winner: m.a })).status, 200);
+      }
+      state = await live();
+    }
+    assert.equal(state.status, 'done');
+    const final = state.matches.find((m: any) => m.round === 2);
+    assert.equal(state.champion.id, final.winner);
+    // Results before the final can't change any more.
+    const semi = state.matches.find((m: any) => m.round === 1);
+    assert.equal((await org.call('POST', `/api/tournaments/${t.id}/matches/${semi.id}/report`, { winner: semi.b })).status, 409);
+    const home = (await players[0].call('GET', '/api/tournaments')).body.tournaments;
+    assert.equal(home[0].status, 'done');
+  });
+
+  test('team tournament: captains register whole rosters once', async () => {
+    const org = await new Client('tt_org').register();
+    const capA = await new Client('tt_capa').register();
+    const capB = await new Client('tt_capb').register();
+    const mate = await new Client('tt_mate').register();
+    const c = (await org.call('POST', '/api/communities', { name: 'Squads', game: 'Valorant' })).body.community;
+    for (const p of [capA, capB, mate]) await p.call('POST', `/api/communities/${c.id}/join`);
+    const t = (await org.call('POST', `/api/communities/${c.id}/tournaments`, { name: 'Duo Clash', teamSize: 2, maxEntrants: 4, startsAt: Date.now() + 3600e3 })).body
+      .tournament;
+    const teamA = (await capA.call('POST', '/api/teams', { name: 'Alpha', tag: 'ALP' })).body.team;
+    assert.equal((await capA.call('POST', `/api/tournaments/${t.id}/register`, { teamId: teamA.id })).status, 400);
+    await capA.call('POST', `/api/teams/${teamA.id}/invites`, { userId: mate.id });
+    await mate.call('POST', `/api/teams/${teamA.id}/accept`);
+    assert.equal((await mate.call('POST', `/api/tournaments/${t.id}/register`, { teamId: teamA.id })).status, 403);
+    const reg = await capA.call('POST', `/api/tournaments/${t.id}/register`, { teamId: teamA.id });
+    assert.equal(reg.status, 201);
+    assert.equal(reg.body.tournament.entries[0].name, 'Alpha [ALP]');
+    assert.equal(reg.body.tournament.entries[0].players.length, 2);
+    // The same player can't play for a second team.
+    const teamB = (await capB.call('POST', '/api/teams', { name: 'Bravo', tag: 'BRV' })).body.team;
+    await capB.call('POST', `/api/teams/${teamB.id}/invites`, { userId: mate.id });
+    await mate.call('POST', `/api/teams/${teamB.id}/accept`);
+    const dup = await capB.call('POST', `/api/tournaments/${t.id}/register`, { teamId: teamB.id });
+    assert.equal(dup.status, 409);
+    assert.match(dup.body.error, /tt_mate/);
+    // Withdrawing frees the roster.
+    assert.equal((await capA.call('DELETE', `/api/tournaments/${t.id}/entries/${reg.body.tournament.entries[0].id}`)).status, 200);
+    assert.equal((await capB.call('POST', `/api/tournaments/${t.id}/register`, { teamId: teamB.id })).status, 201);
+  });
+});
+
+describe('phase 4b: news', () => {
+  test('parses Steam posts, caches them and survives a failing source', async () => {
+    const { createNews, summarize, firstImage, categorize } = await import('../src/news.ts');
+    assert.equal(summarize('[h1]Patch[/h1] Fixed &amp; improved [img]{STEAM_CLAN_IMAGE}/1/a.png[/img] <b>stuff</b> https://x.y/z'), 'Patch Fixed & improved stuff');
+    assert.equal(firstImage('hello [img]{STEAM_CLAN_IMAGE}/123/abc.png[/img]'), 'https://clan.akamai.steamstatic.com/images/123/abc.png');
+    assert.equal(firstImage('<img src="http://insecure/x.png">'), null);
+    assert.equal(categorize('Release Notes for 10/30/2026'), 'patch');
+    assert.equal(categorize('The Major is coming'), 'esports');
+
+    let calls = 0;
+    let fail = false;
+    const fakeFetch = (async (url: string) => {
+      calls++;
+      if (fail) throw new Error('offline');
+      const appid = Number(new URL(url).searchParams.get('appid'));
+      return new Response(
+        JSON.stringify({
+          appnews: {
+            newsitems: [
+              { gid: `${appid}-1`, title: 'Patch 1.2', url: 'https://store.steampowered.com/news/1', contents: 'Balance changes', feedlabel: 'Community Announcements', date: 1_700_000_000 + appid },
+              { gid: `${appid}-2`, title: 'Bad link', url: 'javascript:alert(1)', contents: '', date: 1 },
+            ],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+    const news = createNews({ fetch: fakeFetch, ttlMs: 60_000 });
+    const r = await news.forGames(['counter-strike 2', 'Dota 2', 'Valorant', 'Not A Game']);
+    assert.equal(r.sources.length, 3);
+    assert.equal(r.items.length, 2);
+    assert.equal(r.items[0].game, 'Counter-Strike 2'); // newer first
+    assert.equal(r.items[0].category, 'patch');
+    assert.equal(r.sources.find((s) => s.game === 'Valorant')!.appid, null);
+    await news.forGames(['Dota 2']);
+    assert.equal(calls, 2, 'served from cache');
+
+    const stale = createNews({ fetch: fakeFetch, ttlMs: 0 });
+    await stale.forGames(['Dota 2']);
+    fail = true;
+    const down = await stale.forGames(['Dota 2']);
+    assert.equal(down.sources[0].ok, false);
+    assert.equal(down.items.length, 1, 'last good copy');
+  });
+
+  test('the news route uses your games', async () => {
+    const u = await new Client('news_u').register();
+    await u.call('PATCH', '/api/users/me', { games: ['Valorant', 'Minecraft'] });
+    const r = await u.call('GET', '/api/news');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.games, ['Valorant', 'Minecraft']);
+    assert.ok(r.body.sources.every((s: any) => s.officialUrl.startsWith('https://')));
+  });
+});

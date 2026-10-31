@@ -92,7 +92,7 @@ export type PermKey = keyof typeof PERMS;
 export const can = (c: { permissions?: number } | null | undefined, perm: PermKey) =>
   !!c && ((c.permissions ?? 0) & PERMS[perm]) === PERMS[perm];
 
-export type NotificationKind = 'mention' | 'reply' | 'friend_request' | 'friend_accept' | 'event';
+export type NotificationKind = 'mention' | 'reply' | 'friend_request' | 'friend_accept' | 'event' | 'team_invite' | 'tournament';
 
 export interface Notification {
   id: string;
@@ -239,4 +239,91 @@ export interface LfgPost {
   groupId: string | null;
   mine: boolean;
   joined: boolean;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  tag: string;
+  game: string;
+  bio: string;
+  accent: string;
+  captainId: string;
+  members: User[];
+  invites: User[];
+  myRole: 'captain' | 'member' | 'invited' | null;
+  createdAt: number;
+}
+
+export type TournamentStatus = 'registration' | 'live' | 'done';
+
+export interface TournamentSummary {
+  id: string;
+  communityId: string;
+  communityName: string;
+  communityAccent: string;
+  name: string;
+  game: string;
+  description: string;
+  teamSize: number;
+  maxEntrants: number;
+  bestOf: number;
+  startsAt: number;
+  status: TournamentStatus;
+  entrants: number;
+  champion: { id: string; name: string } | null;
+  creator: User | null;
+  canManage: boolean;
+  myEntryId: string | null;
+  createdAt: number;
+}
+
+export interface TournamentEntry {
+  id: string;
+  name: string;
+  seed: number | null;
+  team: { id: string; name: string; tag: string; accent: string } | null;
+  ownerId: string;
+  players: User[];
+}
+
+export interface TournamentMatch {
+  id: string;
+  round: number;
+  slot: number;
+  a: string | null;
+  b: string | null;
+  winner: string | null;
+  scoreA: number | null;
+  scoreB: number | null;
+  status: 'pending' | 'done';
+  disputed: boolean;
+  canReport: boolean;
+  canDispute: boolean;
+}
+
+export interface Tournament extends TournamentSummary {
+  entries: TournamentEntry[];
+  matches: TournamentMatch[];
+  rounds: number;
+}
+
+export interface NewsItem {
+  id: string;
+  game: string;
+  title: string;
+  summary: string;
+  url: string;
+  image: string | null;
+  source: string;
+  author: string;
+  category: 'patch' | 'esports' | 'news';
+  publishedAt: number;
+}
+
+export interface NewsSource {
+  game: string;
+  appid: number | null;
+  officialUrl: string;
+  ok: boolean;
 }

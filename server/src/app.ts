@@ -14,6 +14,10 @@ import { inboxRoutes } from './routes/inbox.ts';
 import { eventRoutes } from './routes/events.ts';
 import { feedRoutes } from './routes/feed.ts';
 import { lfgRoutes } from './routes/lfg.ts';
+import { teamRoutes } from './routes/teams.ts';
+import { tournamentRoutes } from './routes/tournaments.ts';
+import { newsRoutes } from './routes/news.ts';
+import { createNews, type NewsService } from './news.ts';
 import { mediaRoutes, uploadsStatic } from './routes/media.ts';
 import { userRoutes } from './routes/users.ts';
 
@@ -23,6 +27,8 @@ export interface AppOptions {
   /** Built client to serve, if present. */
   staticDir?: string;
   secureCookies?: boolean;
+  /** Game news source; tests pass one with a fake fetch. */
+  news?: NewsService;
 }
 
 export function createNexus(opts: AppOptions) {
@@ -53,6 +59,9 @@ export function createNexus(opts: AppOptions) {
   authed.use(eventRoutes(rt));
   authed.use(feedRoutes(rt));
   authed.use(lfgRoutes(rt));
+  authed.use(teamRoutes(rt));
+  authed.use(tournamentRoutes(rt));
+  authed.use(newsRoutes(rt, opts.news ?? createNews()));
   app.use('/api', authed);
   app.use('/uploads', uploadsStatic(opts.uploadDir));
   app.use('/api', (_req, _res, next) => next(notFound('No such API route')));

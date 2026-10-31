@@ -81,7 +81,12 @@ export function usersById(ctx: Ctx, ids: string[]): PublicUser[] {
   const rows = ctx.db
     .prepare(`SELECT * FROM users WHERE id IN (${ids.map(() => '?').join(',')})`)
     .all(...ids) as unknown as UserRow[];
-  return rows.map((r) => publicUser(ctx, r));
+  // Keep the caller's order (rosters, captains first and so on).
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return [...new Set(ids)].flatMap((id) => {
+    const r = byId.get(id);
+    return r ? [publicUser(ctx, r)] : [];
+  });
 }
 
 export interface MessageRow {

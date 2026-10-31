@@ -14,7 +14,7 @@ const FILTERS: { id: Filter; label: string; match: (n: Notification) => boolean 
   { id: 'all', label: 'All', match: () => true },
   { id: 'mentions', label: 'Mentions', match: (n) => n.kind === 'mention' || n.kind === 'reply' },
   { id: 'social', label: 'Friends', match: (n) => n.kind === 'friend_request' || n.kind === 'friend_accept' },
-  { id: 'events', label: 'Events', match: (n) => n.kind === 'event' },
+  { id: 'events', label: 'Events', match: (n) => n.kind === 'event' || n.kind === 'tournament' || n.kind === 'team_invite' },
 ];
 
 function dayBucket(ts: number) {

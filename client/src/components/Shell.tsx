@@ -36,8 +36,8 @@ const NAV: { to: string; label: string; icon: LucideIcon; soon?: boolean }[] = [
   { to: '/communities', label: 'Communities', icon: LayoutGrid },
   { to: '/feed', label: 'Feed', icon: Clapperboard },
   { to: '/lfg', label: 'Teammates', icon: Swords },
-  { to: '/news', label: 'News', icon: Newspaper, soon: true },
-  { to: '/tournaments', label: 'Tournaments', icon: Trophy, soon: true },
+  { to: '/news', label: 'News', icon: Newspaper },
+  { to: '/tournaments', label: 'Tournaments', icon: Trophy },
   { to: '/notifications', label: 'Inbox', icon: Bell },
 ];
 

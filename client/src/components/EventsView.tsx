@@ -189,7 +189,7 @@ export function EventsView({ community }: { community: Community }) {
 }
 
 /** "2026-11-01T20:00" for a datetime-local input, in local time. */
-function localInput(ts: number) {
+export function localInput(ts: number) {
   const d = new Date(ts);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;

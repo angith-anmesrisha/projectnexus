@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { AtSign, CalendarDays, CornerUpLeft, UserPlus, X } from 'lucide-react';
+import { AtSign, CalendarDays, CornerUpLeft, Shield, Trophy, UserPlus, X } from 'lucide-react';
 import { notificationLink, notificationVerb, showsSnippet } from '../lib/notifications';
 import { useNexus } from '../lib/store';
 import type { Notification } from '../lib/types';
@@ -11,6 +11,8 @@ export const KIND_ICON = {
   friend_request: UserPlus,
   friend_accept: UserPlus,
   event: CalendarDays,
+  team_invite: Shield,
+  tournament: Trophy,
 } as const;
 
 export function NotificationIcon({ n }: { n: Notification }) {

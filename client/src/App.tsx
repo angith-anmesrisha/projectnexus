@@ -11,7 +11,8 @@ import { HomePage } from './pages/HomePage';
 import { MessagesPage } from './pages/MessagesPage';
 import { CommunitiesPage } from './pages/CommunitiesPage';
 import { DiscoverPage } from './pages/DiscoverPage';
-import { ComingSoonPage } from './pages/ComingSoonPage';
+import { NewsPage } from './pages/NewsPage';
+import { TournamentsPage } from './pages/TournamentsPage';
 import { FeedPage } from './pages/FeedPage';
 import { LfgPage } from './pages/LfgPage';
 import { NotificationsPage } from './pages/NotificationsPage';
@@ -48,13 +49,14 @@ export function App() {
               <Route path="feed" element={<FeedPage />} />
               <Route path="feed/:clipId" element={<FeedPage />} />
               <Route path="lfg" element={<LfgPage />} />
-              <Route path="news" element={<ComingSoonPage section="news" />} />
+              <Route path="news" element={<NewsPage />} />
               <Route path="communities" element={<CommunitiesPage />} />
               <Route path="communities/:communityId" element={<CommunitiesPage />} />
               <Route path="communities/:communityId/:channelId" element={<CommunitiesPage />} />
               <Route path="messages" element={<MessagesPage />} />
               <Route path="messages/:channelId" element={<MessagesPage />} />
-              <Route path="tournaments" element={<ComingSoonPage section="tournaments" />} />
+              <Route path="tournaments" element={<TournamentsPage />} />
+              <Route path="tournaments/:tournamentId" element={<TournamentsPage />} />
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="studio" element={<StudioPage />} />
               <Route path="studio/:section" element={<StudioPage />} />

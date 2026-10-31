@@ -13,6 +13,10 @@ export function notificationLink(n: Notification): string {
     case 'friend_request':
     case 'friend_accept':
       return '/messages';
+    case 'team_invite':
+      return '/tournaments?tab=teams';
+    case 'tournament':
+      return n.eventId ? `/tournaments/${n.eventId}` : '/tournaments';
   }
 }
 
@@ -30,6 +34,10 @@ export function notificationVerb(n: Notification): string {
       return 'accepted your friend request';
     case 'event':
       return `scheduled ${n.text ? `“${n.text}”` : 'an event'}${n.communityName ? ` in ${n.communityName}` : ''}`;
+    case 'team_invite':
+      return `invited you to join ${n.text || 'their team'}`;
+    case 'tournament':
+      return n.text || 'updated a tournament';
   }
 }
 
