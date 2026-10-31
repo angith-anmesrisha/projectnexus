@@ -1,0 +1,18 @@
+{
+  "name": "project-nexus",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Project Nexus: the all-in-one social platform for gamers",
+  "workspaces": ["server", "client"],
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "dev": "concurrently -n server,client -c magenta,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "npm test -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
