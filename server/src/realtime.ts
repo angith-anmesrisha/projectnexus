@@ -42,6 +42,8 @@ export interface Realtime {
   attach(server: HttpServer): Server;
   toChannel(channelId: string, event: string, payload: unknown): void;
   toUser(userId: string, event: string, payload: unknown): void;
+  /** Every connected client (public feeds like LFG). */
+  toAll(event: string, payload: unknown): void;
   /** Subscribe a user's open sockets to a channel they just gained access to. */
   joinChannel(userId: string, channelId: string): void;
   leaveChannel(userId: string, channelId: string): void;
@@ -112,6 +114,9 @@ export function createRealtime(db: DB): Realtime {
     },
     toChannel(channelId, event, payload) {
       io?.to(channelRoom(channelId)).emit(event, payload);
+    },
+    toAll(event, payload) {
+      io?.emit(event, payload);
     },
     toUser(userId, event, payload) {
       io?.to(userRoom(userId)).emit(event, payload);

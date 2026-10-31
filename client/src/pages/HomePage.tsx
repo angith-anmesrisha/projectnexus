@@ -146,20 +146,27 @@ export function HomePage() {
             )}
 
             <article className="card span-3 roadmap-card">
-              <div className="card-head"><h3>Coming to Nexus</h3></div>
+              <div className="card-head"><h3>New and coming</h3></div>
               <div className="roadmap">
                 {[
-                  { icon: Gamepad2, t: 'Teammate finder', d: 'LFG matched by game, role and rank' },
-                  { icon: Clapperboard, t: 'Clip feed', d: 'Vertical clips and montages' },
+                  { icon: Gamepad2, t: 'Teammate finder', d: 'Post what you play, fill your squad', to: '/lfg' },
+                  { icon: Clapperboard, t: 'Clip feed', d: 'Vertical clips and montages', to: '/feed' },
                   { icon: Newspaper, t: 'News', d: 'Patch notes for your games' },
                   { icon: Trophy, t: 'Tournaments', d: 'Brackets inside communities' },
-                ].map((r) => (
-                  <div key={r.t} className="road">
-                    <span className="road-icon"><r.icon size={18} /></span>
-                    <span><strong>{r.t}</strong><span className="muted small">{r.d}</span></span>
-                    <ArrowRight size={14} className="muted" />
-                  </div>
-                ))}
+                ].map((r) => {
+                  const body = (
+                    <>
+                      <span className="road-icon"><r.icon size={18} /></span>
+                      <span><strong>{r.t} {r.to ? <span className="chip sm on">New</span> : null}</strong><span className="muted small">{r.d}</span></span>
+                      <ArrowRight size={14} className="muted" />
+                    </>
+                  );
+                  return r.to ? (
+                    <Link key={r.t} to={r.to} className="road live">{body}</Link>
+                  ) : (
+                    <div key={r.t} className="road">{body}</div>
+                  );
+                })}
               </div>
             </article>
           </div>

@@ -574,3 +574,80 @@ describe('phase 3: voice rooms and signalling', () => {
     sb.close();
   });
 });
+
+describe('phase 4a: clip feed and teammate finder', () => {
+  const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypmp42'), Buffer.alloc(64)]);
+
+  test('clips: upload, links, likes, comments, follows and sharing', async () => {
+    const a = await new Client('clip_a').register();
+    const b = await new Client('clip_b').register();
+    await a.call('PATCH', '/api/users/me', { games: ['Valorant'] });
+    const up = await b.upload(mp4, 'ace.mp4');
+    assert.equal(up.body.attachment.kind, 'video');
+    const clip = (await b.call('POST', '/api/clips', { title: '1v4 on Ascent', game: 'Valorant', uploadId: up.body.id })).body.clip;
+    assert.equal(clip.source, 'upload');
+    const yt = await b.call('POST', '/api/clips', { title: 'Montage', game: 'Apex Legends', link: 'https://youtu.be/dQw4w9WgXcQ' });
+    assert.equal(yt.body.clip.source, 'youtube');
+    assert.equal(yt.body.clip.url, 'dQw4w9WgXcQ');
+    const tw = await b.call('POST', '/api/clips', { title: 'Clutch', link: 'https://www.twitch.tv/someone/clip/FunnyClipSlug-abc' });
+    assert.equal(tw.body.clip.source, 'twitch');
+    assert.equal((await b.call('POST', '/api/clips', { title: 'Nope', link: 'https://evil.example.com/v.mp4' })).status, 400);
+    const img = await b.upload(Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(32)]), 'x.png');
+    assert.equal((await b.call('POST', '/api/clips', { title: 'Pic', uploadId: img.body.id })).status, 400);
+
+    // For you favours A's game.
+    const feed = (await a.call('GET', '/api/clips')).body.clips;
+    assert.equal(feed[0].id, clip.id);
+    assert.equal((await a.call('GET', '/api/clips?tab=following')).body.clips.length, 0);
+    await a.call('POST', `/api/users/${b.id}/follow`);
+    assert.equal((await a.call('GET', '/api/clips?tab=following')).body.clips.length, 3);
+
+    const liked = (await a.call('POST', `/api/clips/${clip.id}/like`)).body.clip;
+    assert.equal(liked.likes, 1);
+    assert.equal(liked.liked, true);
+    await a.call('POST', `/api/clips/${clip.id}/comments`, { content: 'insane' });
+    const comments = (await b.call('GET', `/api/clips/${clip.id}/comments`)).body.comments;
+    assert.equal(comments[0].content, 'insane');
+    // The creator can tidy their clip's comments.
+    assert.equal((await b.call('DELETE', `/api/clip-comments/${comments[0].id}`)).status, 200);
+
+    await befriend(a, b);
+    const dm = (await a.call('POST', '/api/dms', { userIds: [b.id] })).body.conversation;
+    assert.equal((await a.call('POST', `/api/clips/${clip.id}/share`, { channelId: dm.id })).status, 201);
+    const msgs = (await b.call('GET', `/api/channels/${dm.id}/messages`)).body.messages;
+    assert.match(msgs[msgs.length - 1].content, new RegExp(`/feed/${clip.id}`));
+
+    assert.equal((await a.call('DELETE', `/api/clips/${clip.id}`)).status, 403);
+    assert.equal((await b.call('DELETE', `/api/clips/${clip.id}`)).status, 200);
+  });
+
+  test('LFG posts fill up and become a group chat', async () => {
+    const host = await new Client('lfg_host').register();
+    const p1 = await new Client('lfg_p1').register();
+    const p2 = await new Client('lfg_p2').register();
+    const late = await new Client('lfg_late').register();
+    const post = (await host.call('POST', '/api/lfg', { game: 'Valorant', mode: 'Ranked', rank: 'Gold', region: 'EU', slots: 2, mic: true })).body.post;
+    assert.equal(post.slots, 2);
+    assert.equal((await host.call('POST', '/api/lfg', { game: 'X', region: 'MOON' })).status, 400);
+    assert.equal((await p1.call('GET', '/api/lfg?region=EU')).body.posts.length >= 1, true);
+
+    await p1.call('POST', `/api/lfg/${post.id}/join`);
+    const full = (await p2.call('POST', `/api/lfg/${post.id}/join`)).body.post;
+    assert.equal(full.filled, 2);
+    assert.equal((await late.call('POST', `/api/lfg/${post.id}/join`)).status, 409);
+    assert.equal((await p1.call('POST', `/api/lfg/${post.id}/group`)).status, 403);
+
+    const sp1 = await p1.socket();
+    const dmNew = once(sp1, 'dm:new');
+    const r = (await host.call('POST', `/api/lfg/${post.id}/group`)).body;
+    assert.equal(r.conversation.kind, 'group');
+    assert.equal(r.conversation.members.length, 3);
+    assert.equal((await dmNew).id, r.conversation.id);
+    // Squad members can talk right away, without being friends.
+    assert.equal((await p2.call('POST', `/api/channels/${r.conversation.id}/messages`, { content: 'ggs incoming' })).status, 201);
+
+    assert.equal((await host.call('POST', `/api/lfg/${post.id}/close`)).status, 200);
+    assert.equal((await late.call('GET', '/api/lfg')).body.posts.some((p: any) => p.id === post.id), false);
+    sp1.close();
+  });
+});

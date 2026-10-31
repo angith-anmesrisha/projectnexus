@@ -194,3 +194,49 @@ export interface Message {
 export interface MessageEvent extends Message {
   reactors: { emoji: string; user_id: string }[];
 }
+
+export interface Clip {
+  id: string;
+  title: string;
+  game: string;
+  source: 'upload' | 'youtube' | 'twitch';
+  url: string;
+  thumb: string | null;
+  width: number | null;
+  height: number | null;
+  createdAt: number;
+  author: User | null;
+  likes: number;
+  comments: number;
+  liked: boolean;
+  following: boolean;
+  mine: boolean;
+}
+
+export interface ClipComment {
+  id: string;
+  author: User | null;
+  content: string;
+  createdAt: number;
+  mine: boolean;
+}
+
+export interface LfgPost {
+  id: string;
+  host: User | null;
+  players: User[];
+  game: string;
+  mode: string;
+  rank: string;
+  region: string;
+  slots: number;
+  filled: number;
+  mic: boolean;
+  note: string;
+  createdAt: number;
+  expiresAt: number;
+  closed: boolean;
+  groupId: string | null;
+  mine: boolean;
+  joined: boolean;
+}

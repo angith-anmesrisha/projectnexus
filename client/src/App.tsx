@@ -12,6 +12,8 @@ import { MessagesPage } from './pages/MessagesPage';
 import { CommunitiesPage } from './pages/CommunitiesPage';
 import { DiscoverPage } from './pages/DiscoverPage';
 import { ComingSoonPage } from './pages/ComingSoonPage';
+import { FeedPage } from './pages/FeedPage';
+import { LfgPage } from './pages/LfgPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { StudioPage } from './pages/StudioPage';
 import { InvitePage } from './pages/InvitePage';
@@ -43,7 +45,9 @@ export function App() {
             <Route element={<Shell />}>
               <Route index element={<HomePage />} />
               <Route path="discover" element={<DiscoverPage />} />
-              <Route path="feed" element={<ComingSoonPage section="feed" />} />
+              <Route path="feed" element={<FeedPage />} />
+              <Route path="feed/:clipId" element={<FeedPage />} />
+              <Route path="lfg" element={<LfgPage />} />
               <Route path="news" element={<ComingSoonPage section="news" />} />
               <Route path="communities" element={<CommunitiesPage />} />
               <Route path="communities/:communityId" element={<CommunitiesPage />} />

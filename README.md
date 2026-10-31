@@ -52,6 +52,17 @@ Nexus brings together three experiences: **Connect** (friends, messaging, commun
 - Mute, deafen, speaking rings, connection hints, and a floating voice bar so calls keep going while you browse
 - Peer-to-peer WebRTC (up to 12 per room) with server-side room checks; set `TURN_URL`, `TURN_USERNAME` and `TURN_CREDENTIAL` for strict networks
 
+**Clip feed**
+- Full-screen vertical feed with For you, Following and New tabs, game filters, J/K or arrow keys, and infinite scroll
+- Upload your own clips (MP4 or WebM, up to 50 MB) or post a YouTube or Twitch clip link (only those two providers are embedded)
+- Likes, comments, follow creators, and share any clip into a DM, group or community channel, where it shows as a playable card
+- For you ranks by engagement and freshness, with a boost for your games and the people you follow
+
+**Teammate finder**
+- Post what you're playing: game, mode, rank, region, players needed, mic, a note and how long the post stays open
+- Live board filtered by game and region; join or leave with one click and watch seats fill in real time
+- The host turns the squad into a group chat in one click, and late joiners are added to it automatically
+
 **Customisation Studio** (Ctrl+,)
 - Nine themes, plus full control over accent colours, background, panels, text, light or dark mode
 - Wallpapers (aurora, neon grid, mesh, solid or your own image), dimming, panel opacity and glass blur
@@ -71,8 +82,8 @@ Nexus brings together three experiences: **Connect** (friends, messaging, commun
 - Community name, game, description and accent colour
 
 **Navigation**
-- Home, Discover, Feed, News, Communities, Messages, Tournaments and Notifications
-- Feed, News, Tournaments and Notifications are placeholders describing what is coming
+- Home, Discover, Messages, Communities, Feed, Teammates, News, Tournaments and Inbox
+- News and Tournaments are placeholders describing what is coming
 
 Every permission is enforced on the server. Private channels answer 404 to non-members so their ids cannot be probed.
 
@@ -117,18 +128,18 @@ server/
     access.ts        Authorization rules for channels, messages and communities
     realtime.ts      Socket.IO rooms, presence and typing
     serialize.ts     API response shapes
-    routes/          auth, users and friends, communities and channels, messages and DMs
+    routes/          auth, users, communities, messages, inbox, events, feed, lfg, media
   test/              node:test suite
 client/
   src/
     lib/             API client, socket, app state, types
     components/      Shell, ChatView, ProfileModal and shared UI
-    pages/           Home, Messages, Communities, Discover, Settings, placeholders
+    pages/           Home, Messages, Communities, Discover, Feed, LFG, Studio, placeholders
 ```
 
 ## Next up
 
 - Per-community notification settings
 - An SFU for large voice rooms and stage events
-- Discover feed with clips and permitted video embeds
-- News aggregation, teammate search and tournaments
+- Teams and tournaments with brackets
+- News for the games you play

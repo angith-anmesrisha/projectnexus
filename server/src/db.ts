@@ -210,6 +210,67 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
 );
 `;
 
+const SCHEMA_V4 = `
+-- Discover: short gaming clips, uploaded or embedded from YouTube / Twitch.
+CREATE TABLE IF NOT EXISTS clips (
+  id         TEXT PRIMARY KEY,
+  author_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title      TEXT NOT NULL,
+  game       TEXT NOT NULL DEFAULT '',
+  source     TEXT NOT NULL,          -- upload | youtube | twitch
+  url        TEXT NOT NULL,          -- upload path, or the provider's video/clip id
+  width      INTEGER,
+  height     INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS clips_created ON clips(created_at);
+
+CREATE TABLE IF NOT EXISTS clip_likes (
+  clip_id TEXT NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (clip_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS clip_comments (
+  id         TEXT PRIMARY KEY,
+  clip_id    TEXT NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+  author_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content    TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS follows (
+  follower_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  followee_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (follower_id, followee_id)
+);
+
+-- Teammate finder.
+CREATE TABLE IF NOT EXISTS lfg_posts (
+  id               TEXT PRIMARY KEY,
+  author_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  game             TEXT NOT NULL,
+  mode             TEXT NOT NULL DEFAULT '',
+  rank             TEXT NOT NULL DEFAULT '',
+  region           TEXT NOT NULL DEFAULT '',
+  slots            INTEGER NOT NULL,     -- players wanted, not counting the host
+  mic              INTEGER NOT NULL DEFAULT 0,
+  note             TEXT NOT NULL DEFAULT '',
+  group_channel_id TEXT REFERENCES channels(id) ON DELETE SET NULL,
+  created_at       INTEGER NOT NULL,
+  expires_at       INTEGER NOT NULL,
+  closed_at        INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS lfg_members (
+  post_id   TEXT NOT NULL REFERENCES lfg_posts(id) ON DELETE CASCADE,
+  user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY (post_id, user_id)
+);
+`;
+
 /** Add a column if an older database does not have it yet. */
 function addColumn(db: DB, table: string, column: string, definition: string) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
@@ -230,6 +291,7 @@ export function openDb(path: string): DB {
   // Forum posts are channels of kind 'thread' that point at their forum.
   addColumn(db, 'channels', 'parent_id', 'TEXT REFERENCES channels(id) ON DELETE CASCADE');
   db.exec('CREATE INDEX IF NOT EXISTS channels_parent ON channels(parent_id)');
+  db.exec(SCHEMA_V4);
   return db;
 }
 

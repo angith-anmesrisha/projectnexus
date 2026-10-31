@@ -3,6 +3,7 @@ import { Copy, Download, Flag, Heart, MoreHorizontal, Pencil, Pin, Reply, SmileP
 import { api } from '../lib/api';
 import { clock, fileSize, timeLabel } from '../lib/format';
 import { isEmojiOnly, renderMessage } from '../lib/markdown';
+import { CLIP_LINK, ClipEmbed } from './ClipPlayer';
 import { recentEmoji } from '../lib/emoji';
 import { Sticker } from '../lib/stickers';
 import type { Attachment, Message } from '../lib/types';
@@ -45,6 +46,7 @@ function MessageItemInner({ m, grouped, editing, ctx, editor }: Props) {
   const timeOpts = { clock24: p.clock24, relative: p.relativeTime };
   const mentionsMe = new RegExp(`@${ctx.myUsername.replace(/\./g, '\\.')}\\b`, 'i').test(m.content);
   const jumbo = p.bigEmoji && m.attachments.length === 0 && isEmojiOnly(m.content);
+  const clipId = m.content.match(CLIP_LINK)?.[1];
   const quick = [...new Set([...recentEmoji(), '🔥', '😂', '💀', '👍'])].slice(0, 3);
 
   async function saveGif(a: Attachment) {
@@ -101,10 +103,11 @@ function MessageItemInner({ m, grouped, editing, ctx, editor }: Props) {
             <div className="msg-body">
               {m.content && (
                 <div className={`msg-text ${jumbo ? 'jumbo' : ''}`}>
-                  {renderMessage(m.content, { markdown: p.markdown, spoilers: p.spoilers, streamer: p.streamerMode, myUsername: ctx.myUsername })}
+                  {renderMessage(clipId ? m.content.replace(CLIP_LINK, '') : m.content, { markdown: p.markdown, spoilers: p.spoilers, streamer: p.streamerMode, myUsername: ctx.myUsername })}
                   {m.editedAt && <span className="msg-edited"> (edited)</span>}
                 </div>
               )}
+              {clipId && <ClipEmbed id={clipId} />}
               {m.sticker && (
                 <div className="msg-sticker">
                   <Sticker sticker={m.sticker} size={150} />

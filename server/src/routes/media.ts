@@ -8,6 +8,8 @@ import type { Realtime } from '../realtime.ts';
 import type { Attachment } from '../serialize.ts';
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** Videos (clips) may be larger than other files. */
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
 /** Built-in sticker pack. The client draws these; the server only checks ids. */
 export const BUILTIN_STICKERS = [
@@ -81,7 +83,7 @@ export function mediaRoutes(rt: Realtime, uploadDir: string) {
   const recentUploads = new Map<string, number[]>();
 
   // Body is the raw file. Name and display size come in the query string.
-  router.post('/uploads', express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }), (req, res) => {
+  router.post('/uploads', express.raw({ type: () => true, limit: MAX_VIDEO_BYTES }), (req, res) => {
     const userId = me(req);
     const now = Date.now();
     const recent = (recentUploads.get(userId) ?? []).filter((t) => now - t < 10 * 60_000);
@@ -94,6 +96,7 @@ export function mediaRoutes(rt: Realtime, uploadDir: string) {
     const rawName = typeof req.query.name === 'string' ? req.query.name : 'file';
     const name = rawName.replace(/[^\w.\- ()]/g, '_').slice(0, 120) || 'file';
     const sniffed = sniff(body);
+    if (body.length > MAX_UPLOAD_BYTES && sniffed?.kind !== 'video') throw new HttpError(413, 'Files over 10 MB must be videos (up to 50 MB)');
     const id = randomUUID();
     const token = randomBytes(16).toString('hex');
     // Unknown types are stored as opaque downloads so the browser never renders them.
