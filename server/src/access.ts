@@ -5,7 +5,7 @@ import type { DB } from './db.ts';
 import { badRequest, forbidden, notFound } from './http.ts';
 
 export type Role = 'owner' | 'admin' | 'member';
-export type ChannelKind = 'text' | 'announcement' | 'forum' | 'thread' | 'dm' | 'group';
+export type ChannelKind = 'text' | 'announcement' | 'forum' | 'thread' | 'voice' | 'dm' | 'group';
 
 export interface ChannelRow {
   id: string;

@@ -4,6 +4,7 @@ import type { DB } from './db.ts';
 import { SESSION_COOKIE, parseCookies, userIdForToken } from './auth.ts';
 import { readableChannel } from './access.ts';
 import { getUser, publicUser, type Ctx } from './serialize.ts';
+import { createVoice, type VoiceParticipant } from './voice.ts';
 
 const userRoom = (id: string) => `user:${id}`;
 const channelRoom = (id: string) => `channel:${id}`;
@@ -46,6 +47,8 @@ export interface Realtime {
   leaveChannel(userId: string, channelId: string): void;
   /** Re-send a user's public profile to everyone allowed to see it. */
   broadcastPresence(userId: string): void;
+  /** Who is in each voice room this user can see. */
+  voiceStates(userId: string): Record<string, VoiceParticipant[]>;
   close(): Promise<void>;
 }
 
@@ -53,6 +56,7 @@ export function createRealtime(db: DB): Realtime {
   const connections = new Map<string, number>();
   const ctx: Ctx = { db, isOnline: (id) => (connections.get(id) ?? 0) > 0 };
   let io: Server | null = null;
+  const voice = createVoice(ctx);
 
   const rt: Realtime = {
     ctx,
@@ -70,6 +74,7 @@ export function createRealtime(db: DB): Realtime {
       io.on('connection', (socket) => {
         const userId: string = socket.data.userId;
         socket.join(userRoom(userId));
+        voice.attach(io!, socket);
         for (const id of readableChannelIds(db, userId)) socket.join(channelRoom(id));
 
         const count = (connections.get(userId) ?? 0) + 1;
@@ -116,6 +121,7 @@ export function createRealtime(db: DB): Realtime {
     },
     leaveChannel(userId, channelId) {
       io?.in(userRoom(userId)).socketsLeave(channelRoom(channelId));
+      if (io) voice.evictIfUnreadable(io, userId);
     },
     broadcastPresence(userId) {
       if (!io) return;
@@ -124,6 +130,9 @@ export function createRealtime(db: DB): Realtime {
       const view = publicUser(ctx, user);
       // Include the user's own room so their other tabs and their own member lists stay current.
       io.to([userId, ...presenceAudience(db, userId)].map(userRoom)).emit('user:update', view);
+    },
+    voiceStates(userId) {
+      return voice.statesFor(userId);
     },
     async close() {
       if (io) await new Promise<void>((resolve) => io!.close(() => resolve()));

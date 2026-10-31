@@ -61,11 +61,13 @@ const slug = (name: string) =>
 
 const newInviteCode = () => randomBytes(6).toString('base64url');
 
-const DEFAULT_CHANNELS: { name: string; kind: 'text' | 'announcement'; topic: string }[] = [
+const DEFAULT_CHANNELS: { name: string; kind: 'text' | 'announcement' | 'voice'; topic: string }[] = [
   { name: 'announcements', kind: 'announcement', topic: 'News from the community team' },
   { name: 'general', kind: 'text', topic: 'Hang out and chat' },
   { name: 'looking-for-group', kind: 'text', topic: 'Find teammates for your next session' },
   { name: 'clips', kind: 'text', topic: 'Share your best plays' },
+  { name: 'lounge', kind: 'voice', topic: 'Drop in and hang out' },
+  { name: 'squad-up', kind: 'voice', topic: 'Voice for your next match' },
 ];
 
 export function communityRoutes(rt: Realtime) {
@@ -332,7 +334,7 @@ export function communityRoutes(rt: Realtime) {
     const name = slug(str(req.body, 'name', { min: 1, max: 32 })!);
     if (!CHANNEL_NAME.test(name)) throw badRequest('Channel names use lowercase letters, numbers and dashes');
     const kind = req.body?.kind ?? 'text';
-    if (kind !== 'text' && kind !== 'announcement' && kind !== 'forum') throw badRequest('kind must be text, announcement or forum');
+    if (!['text', 'announcement', 'forum', 'voice'].includes(kind)) throw badRequest('kind must be text, announcement, forum or voice');
     const topic = str(req.body, 'topic', { max: 120, optional: true }) ?? '';
     const { n, maxPos } = db
       .prepare(`SELECT COUNT(*) AS n, COALESCE(MAX(position), -1) AS maxPos FROM channels WHERE community_id = ? AND kind != 'thread'`)

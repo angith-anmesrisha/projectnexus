@@ -1,7 +1,7 @@
 export type Presence = 'online' | 'idle' | 'dnd' | 'offline';
 export type Status = 'online' | 'idle' | 'dnd' | 'invisible';
 export type Role = 'owner' | 'admin' | 'member';
-export type ChannelKind = 'text' | 'announcement' | 'forum' | 'thread' | 'dm' | 'group';
+export type ChannelKind = 'text' | 'announcement' | 'forum' | 'thread' | 'voice' | 'dm' | 'group';
 
 export interface User {
   id: string;

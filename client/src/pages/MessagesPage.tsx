@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
-import { Check, Gamepad2, MessageCirclePlus, MessagesSquare, Search, UserPlus, Users, X } from 'lucide-react';
+import { Check, Gamepad2, MessageCirclePlus, MessagesSquare, Phone, Search, UserPlus, Users, Video, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { conversationTitle, presenceLabel, relative } from '../lib/format';
 import { useNexus } from '../lib/store';
@@ -9,6 +9,8 @@ import { Avatar } from '../components/Avatar';
 import { ChatView } from '../components/ChatView';
 import { Modal } from '../components/Modal';
 import { ProfileModal } from '../components/ProfileModal';
+import { VoiceControls, VoiceStage } from '../components/VoiceRoom';
+import { useVoice } from '../lib/voice';
 
 export function MessagesPage() {
   const { channelId } = useParams();
@@ -89,6 +91,8 @@ export function MessagesPage() {
             canModerate={false}
             canPin
             members={active.members}
+            headerExtra={<CallButtons channelId={active.id} />}
+            banner={<CallPanel conversation={active} />}
             intro={
               <div className="intro">
                 {active.kind === 'dm' && active.others[0] ? <Avatar user={active.others[0]} size={80} /> : <span className="intro-icon"><Users size={34} /></span>}
@@ -370,5 +374,50 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
         </button>
       </div>
     </Modal>
+  );
+}
+
+function CallButtons({ channelId }: { channelId: string }) {
+  const v = useVoice();
+  if (v.channelId === channelId) return null;
+  return (
+    <>
+      <button className="icon-btn" onClick={() => v.join(channelId)} disabled={v.connecting} aria-label="Start a voice call" data-tip="Voice call">
+        <Phone size={18} />
+      </button>
+      <button className="icon-btn" onClick={() => v.join(channelId, { video: true })} disabled={v.connecting} aria-label="Start a video call" data-tip="Video call">
+        <Video size={18} />
+      </button>
+    </>
+  );
+}
+
+/** An ongoing call in this conversation: the call itself, or a prompt to join it. */
+function CallPanel({ conversation }: { conversation: Conversation }) {
+  const v = useVoice();
+  const inRoom = v.rooms[conversation.id] ?? [];
+  const joined = v.channelId === conversation.id;
+  if (joined) {
+    const waiting = inRoom.length <= 1;
+    return (
+      <div className="call-panel">
+        {waiting && <p className="call-waiting"><span className="voice-dot live" /> Calling {conversationTitle(conversation)}…</p>}
+        <VoiceStage channelId={conversation.id} members={conversation.members} compact />
+        <VoiceControls />
+        {v.error && <p className="form-error center">{v.error}</p>}
+      </div>
+    );
+  }
+  if (inRoom.length === 0) return null;
+  return (
+    <div className="call-strip">
+      <span className="voice-dot live" />
+      <span>
+        <b>Call in progress</b> · {inRoom.length} {inRoom.length === 1 ? 'person' : 'people'}
+      </span>
+      <button className="btn sm primary" onClick={() => v.join(conversation.id)}>
+        <Phone size={14} /> Join
+      </button>
+    </div>
   );
 }

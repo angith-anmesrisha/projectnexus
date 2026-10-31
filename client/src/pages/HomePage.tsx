@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, CalendarDays, Clapperboard, Compass, Gamepad2, MessagesSquare, Newspaper, Palette, Plus, Trophy, UserPlus, Volume2 } from 'lucide-react';
+import { ArrowRight, CalendarDays, Clapperboard, Compass, Gamepad2, MessagesSquare, Newspaper, Palette, Plus, Trophy, UserPlus } from 'lucide-react';
 import { api } from '../lib/api';
 import { relative, conversationTitle } from '../lib/format';
 import { useNexus } from '../lib/store';
@@ -149,7 +149,7 @@ export function HomePage() {
               <div className="card-head"><h3>Coming to Nexus</h3></div>
               <div className="roadmap">
                 {[
-                  { icon: Volume2, t: 'Voice lounges', d: 'Drop-in voice with screen share' },
+                  { icon: Gamepad2, t: 'Teammate finder', d: 'LFG matched by game, role and rank' },
                   { icon: Clapperboard, t: 'Clip feed', d: 'Vertical clips and montages' },
                   { icon: Newspaper, t: 'News', d: 'Patch notes for your games' },
                   { icon: Trophy, t: 'Tournaments', d: 'Brackets inside communities' },

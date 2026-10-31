@@ -502,3 +502,75 @@ describe('phase 2: notifications, search, roles, forums, events', () => {
     assert.equal((await b.call('GET', `/api/communities/${community.id}/events`)).body.events.length, 0);
   });
 });
+
+describe('phase 3: voice rooms and signalling', () => {
+  const emitAck = (s: Socket, event: string, payload: unknown) =>
+    new Promise<any>((resolve) => s.emit(event, payload, resolve));
+
+  test('join, signal, update and leave a voice lounge', async () => {
+    const a = await new Client('voice_a').register();
+    const b = await new Client('voice_b').register();
+    const outsider = await new Client('voice_x').register();
+    const community = (await a.call('POST', '/api/communities', { name: 'Voicey' })).body.community;
+    await b.call('POST', `/api/communities/${community.id}/join`);
+    const lounge = community.channels.find((c: any) => c.kind === 'voice');
+    const general = community.channels.find((c: any) => c.name === 'general');
+    assert.ok(lounge, 'communities come with voice lounges');
+
+    const sa = await a.socket();
+    const sb = await b.socket();
+    const so = await outsider.socket();
+
+    assert.ok((await emitAck(sa, 'voice:join', { channelId: general.id })).error, 'text channels have no voice');
+    assert.ok((await emitAck(so, 'voice:join', { channelId: lounge.id })).error, 'outsiders cannot join');
+
+    const stateSeen = once(sb, 'voice:state');
+    const joined = await emitAck(sa, 'voice:join', { channelId: lounge.id });
+    assert.deepEqual(joined.participants.map((p: any) => p.userId), [a.id]);
+    assert.equal((await stateSeen).participants.length, 1);
+    assert.equal((await b.call('GET', '/api/voice')).body.rooms[lounge.id].length, 1);
+    assert.deepEqual((await outsider.call('GET', '/api/voice')).body.rooms, {});
+
+    const aSeesB = once(sa, 'voice:joined');
+    await emitAck(sb, 'voice:join', { channelId: lounge.id });
+    assert.equal((await aSeesB).userId, b.id);
+
+    const signal = once(sa, 'voice:signal');
+    sb.emit('voice:signal', { to: a.id, data: { description: { type: 'offer', sdp: 'x' } } });
+    const got = await signal;
+    assert.equal(got.from, b.id);
+    assert.equal(got.data.description.type, 'offer');
+
+    const muted = once(sb, 'voice:state');
+    sa.emit('voice:update', { muted: true, video: true, streams: { camera: 'cam1' } });
+    const st = (await muted).participants.find((p: any) => p.userId === a.id);
+    assert.equal(st.muted, true);
+    assert.equal(st.streams.camera, 'cam1');
+
+    // Disconnecting leaves the room.
+    const left = once(sb, 'voice:left');
+    sa.close();
+    assert.equal((await left).userId, a.id);
+    sb.close();
+    so.close();
+  });
+
+  test('DM calls ring the other person', async () => {
+    const a = await new Client('call_a').register();
+    const b = await new Client('call_b').register();
+    await befriend(a, b);
+    const dm = (await a.call('POST', '/api/dms', { userIds: [b.id] })).body.conversation;
+    const sa = await a.socket();
+    const sb = await b.socket();
+    const ring = once(sb, 'call:ring');
+    await emitAck(sa, 'voice:join', { channelId: dm.id });
+    const r = await ring;
+    assert.equal(r.channelId, dm.id);
+    assert.equal(r.from.id, a.id);
+    const end = once(sb, 'call:end');
+    sa.emit('voice:leave');
+    assert.equal((await end).channelId, dm.id);
+    sa.close();
+    sb.close();
+  });
+});

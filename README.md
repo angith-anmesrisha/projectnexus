@@ -45,6 +45,13 @@ Nexus brings together three experiences: **Connect** (friends, messaging, commun
 - Community events with date, length, location, Going/Interested RSVPs, live and countdown badges, and an upcoming list on Home
 - Custom roles with colours, separate member list groups, ordering and nine permissions (edit community, channels, roles, moderate, kick, invite, events, @everyone, announcements). Nobody can grant a permission they don't have
 
+**Voice, video and screen share**
+- Voice lounges in every community (two come by default), with who's in them shown live in the sidebar
+- One-click voice or video calls in DMs and group chats, with a ringing card to accept or decline
+- Camera and screen share (with tab audio) in a video grid; double-click any tile to spotlight it
+- Mute, deafen, speaking rings, connection hints, and a floating voice bar so calls keep going while you browse
+- Peer-to-peer WebRTC (up to 12 per room) with server-side room checks; set `TURN_URL`, `TURN_USERNAME` and `TURN_CREDENTIAL` for strict networks
+
 **Customisation Studio** (Ctrl+,)
 - Nine themes, plus full control over accent colours, background, panels, text, light or dark mode
 - Wallpapers (aurora, neon grid, mesh, solid or your own image), dimming, panel opacity and glass blur
@@ -97,7 +104,7 @@ npm run build      # build the client into client/dist
 npm start          # serve the API and the built client on port 3001
 ```
 
-Environment variables for the server: `PORT` (default 3001), `DATABASE_PATH` (default `server/nexus.db`), `UPLOAD_DIR` (default `server/uploads`), `GIPHY_API_KEY` or `TENOR_API_KEY` to turn on live GIF search, and `NODE_ENV=production` to mark cookies `Secure`.
+Environment variables for the server: `PORT` (default 3001), `DATABASE_PATH` (default `server/nexus.db`), `UPLOAD_DIR` (default `server/uploads`), `GIPHY_API_KEY` or `TENOR_API_KEY` to turn on live GIF search, `TURN_URL`/`TURN_USERNAME`/`TURN_CREDENTIAL` for a TURN relay, and `NODE_ENV=production` to mark cookies `Secure`.
 
 ## Layout
 
@@ -122,6 +129,6 @@ client/
 ## Next up
 
 - Per-community notification settings
-- Voice rooms, calls and screen sharing (WebRTC)
+- An SFU for large voice rooms and stage events
 - Discover feed with clips and permitted video embeds
 - News aggregation, teammate search and tournaments

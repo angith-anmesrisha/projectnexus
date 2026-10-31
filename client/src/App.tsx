@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { api } from './lib/api';
 import { AppearanceProvider } from './lib/appearanceStore';
 import { NexusProvider } from './lib/store';
+import { VoiceProvider } from './lib/voice';
 import type { Me } from './lib/types';
 import { Shell } from './components/Shell';
 import { AuthPage } from './pages/AuthPage';
@@ -37,6 +38,7 @@ export function App() {
         <AuthPage onAuthed={setMe} />
       ) : (
         <NexusProvider initialMe={me} onLogout={onLogout}>
+          <VoiceProvider>
           <Routes>
             <Route element={<Shell />}>
               <Route index element={<HomePage />} />
@@ -57,6 +59,7 @@ export function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
+          </VoiceProvider>
         </NexusProvider>
       )}
     </AppearanceProvider>

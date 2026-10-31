@@ -20,6 +20,28 @@ export function inboxRoutes(rt: Realtime) {
   const { db } = rt.ctx;
   const router = Router();
 
+  // ---- Voice ----
+
+  router.get('/voice', (req, res) => {
+    res.json({ rooms: rt.voiceStates(me(req)) });
+  });
+
+  // ICE servers for WebRTC. Public STUN by default; set TURN_URL, TURN_USERNAME
+  // and TURN_CREDENTIAL so calls also work behind strict NATs.
+  router.get('/rtc-config', (_req, res) => {
+    const iceServers: { urls: string | string[]; username?: string; credential?: string }[] = [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    ];
+    if (process.env.TURN_URL) {
+      iceServers.push({
+        urls: process.env.TURN_URL.split(',').map((u) => u.trim()),
+        username: process.env.TURN_USERNAME,
+        credential: process.env.TURN_CREDENTIAL,
+      });
+    }
+    res.json({ iceServers });
+  });
+
   // ---- Notifications ----
 
   router.get('/notifications', (req, res) => {

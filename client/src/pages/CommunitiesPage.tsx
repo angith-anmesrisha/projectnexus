@@ -10,6 +10,10 @@ import { EventsView } from '../components/EventsView';
 import { ForumView } from '../components/ForumView';
 import { Modal } from '../components/Modal';
 import { RolesPanel, topRole } from '../components/RolesPanel';
+import { VoiceRoomView } from '../components/VoiceRoom';
+import { useVoice } from '../lib/voice';
+import { Avatar } from '../components/Avatar';
+import { MicOff, HeadphoneOff, MonitorUp, Video } from 'lucide-react';
 import { MemberRow } from './MessagesPage';
 
 const ACCENTS = ['#8b5cf6', '#22d3ee', '#f43f5e', '#f59e0b', '#10b981', '#ec4899', '#3b82f6', '#a3ff12'];
@@ -85,6 +89,8 @@ export function CommunitiesPage() {
       <section className="main glass">
         {community && isEvents ? (
           <EventsView community={community} />
+        ) : community && channel?.kind === 'voice' ? (
+          <VoiceRoomView channelId={channel.id} name={channel.name} topic={channel.topic} members={community.members} communityName={community.name} />
         ) : community && channel?.kind === 'forum' ? (
           <ForumView key={channel.id} community={community} forum={channel} aside={<MemberList community={community} />} />
         ) : community && channel ? (
@@ -184,15 +190,51 @@ function CommunitySidebar({ community, onModal }: { community: Community; onModa
         {community.channels.filter((c) => c.kind === 'text').map(link)}
         {community.channels.some((c) => c.kind === 'forum') && <div className="ctx-section"><span>Forums</span></div>}
         {community.channels.filter((c) => c.kind === 'forum').map(link)}
+        <div className="ctx-section"><span>Voice</span></div>
+        {community.channels.filter((c) => c.kind === 'voice').map((c) => (
+          <VoiceChannelLink key={c.id} community={community} channel={c} />
+        ))}
         <div className="ctx-section"><span>Happening</span></div>
         <NavLink to={`/communities/${community.id}/events`} className="chan-link">
           <CalendarDays size={17} />
           <span>Events</span>
         </NavLink>
         <div className="ctx-section"><span>Coming soon</span></div>
-        <span className="chan-link later"><Volume2 size={17} /><span>Voice lounges</span></span>
         <span className="chan-link later"><Trophy size={17} /><span>Tournaments</span></span>
       </div>
+    </>
+  );
+}
+
+/** A voice lounge in the sidebar, with whoever is in it right now. */
+function VoiceChannelLink({ community, channel }: { community: Community; channel: Channel }) {
+  const v = useVoice();
+  const people = v.rooms[channel.id] ?? [];
+  const byId = new Map(community.members.map((m) => [m.id, m]));
+  return (
+    <>
+      <NavLink to={`/communities/${community.id}/${channel.id}`} className={`chan-link ${v.channelId === channel.id ? 'in-voice' : ''}`}>
+        <Volume2 size={17} />
+        <span>{channel.name}</span>
+        {people.length > 0 && <span className="voice-pill">{people.length}</span>}
+      </NavLink>
+      {people.length > 0 && (
+        <div className="voice-people">
+          {people.map((p) => {
+            const u = byId.get(p.userId);
+            if (!u) return null;
+            return (
+              <div key={p.userId} className={`voice-person ${v.speaking.has(p.userId) && !p.muted ? 'talking' : ''}`}>
+                <Avatar user={u} size={22} showPresence={false} />
+                <span>{u.displayName}</span>
+                {p.screen && <MonitorUp size={12} className="live-ic" />}
+                {p.video && <Video size={12} />}
+                {p.deafened ? <HeadphoneOff size={12} className="red" /> : p.muted ? <MicOff size={12} className="red" /> : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }
@@ -373,7 +415,7 @@ function CreateChannelModal({ community, onClose }: { community: Community; onCl
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
-  const [kind, setKind] = useState<'text' | 'announcement' | 'forum'>('text');
+  const [kind, setKind] = useState<'text' | 'announcement' | 'forum' | 'voice'>('text');
   const [error, setError] = useState('');
 
   async function submit(e: FormEvent) {
@@ -405,6 +447,11 @@ function CreateChannelModal({ community, onClose }: { community: Community; onCl
             <MessagesSquare size={20} />
             <strong>Forum</strong>
             <span className="muted small">Posts with threads</span>
+          </button>
+          <button type="button" className={`choice ${kind === 'voice' ? 'on' : ''}`} onClick={() => setKind('voice')}>
+            <Volume2 size={20} />
+            <strong>Voice</strong>
+            <span className="muted small">Talk, video, share</span>
           </button>
         </div>
         <label className="field">

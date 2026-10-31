@@ -24,6 +24,9 @@ import { Avatar, CommunityBadge } from './Avatar';
 import { CommandPalette } from './CommandPalette';
 import { SearchModal } from './SearchModal';
 import { Toasts } from './Toasts';
+import { IncomingCallCard, VoiceDock } from './VoiceRoom';
+import { VoiceAudio, useVoice } from '../lib/voice';
+import { conversationTitle } from '../lib/format';
 
 const NAV: { to: string; label: string; icon: LucideIcon; soon?: boolean }[] = [
   { to: '/', label: 'Home', icon: House },
@@ -48,6 +51,7 @@ export function Shell() {
   const { appearance, plugin, setPlugin } = useAppearance();
   const [palette, setPalette] = useState(false);
   const [search, setSearch] = useState(false);
+  const voice = useVoice();
   const [meMenu, setMeMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
@@ -88,6 +92,20 @@ export function Shell() {
   const dmUnread = conversations.filter((c) => unread.has(c.id)).length;
   const badges: Record<string, number> = { '/messages': friends.incoming.length + dmUnread, '/notifications': notificationsUnread };
   const communityUnread = (id: string) => communityDetails[id]?.channels.some((ch) => unread.has(ch.id));
+
+  /** Label and link for the room we are connected to, and whether it is on screen. */
+  function voiceDockTarget() {
+    const id = voice.channelId;
+    const here = location.pathname.split('/').pop() ?? '';
+    if (!id) return { hereChannelId: null, label: '', href: '/' };
+    const convo = conversations.find((c) => c.id === id);
+    if (convo) return { hereChannelId: here === id ? id : null, label: conversationTitle(convo), href: `/messages/${id}` };
+    for (const c of Object.values(communityDetails)) {
+      const ch = c.channels.find((x) => x.id === id);
+      if (ch) return { hereChannelId: here === id ? id : null, label: `${ch.name} · ${c.name}`, href: `/communities/${c.id}/${id}` };
+    }
+    return { hereChannelId: null, label: 'Voice', href: '/' };
+  }
 
   async function setStatus(status: Status) {
     const r = await api.patch<{ user: Me }>('/users/me', { status });
@@ -187,6 +205,9 @@ export function Shell() {
       {palette && <CommandPalette onClose={() => setPalette(false)} onSearch={() => { setPalette(false); setSearch(true); }} />}
       {search && <SearchModal onClose={() => setSearch(false)} />}
       <Toasts />
+      <VoiceAudio />
+      <IncomingCallCard />
+      <VoiceDock {...voiceDockTarget()} />
     </div>
   );
 }

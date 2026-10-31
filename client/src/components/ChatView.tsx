@@ -31,9 +31,11 @@ interface Props {
   focusMessageId?: number;
   /** Extra buttons for the header, before the panel toggles. */
   headerExtra?: ReactNode;
+  /** Shown under the header, e.g. an ongoing call. */
+  banner?: ReactNode;
 }
 
-export function ChatView({ channel, title, icon, topic, lockedReason, canModerate, canPin, members, aside, intro, kind, focusMessageId, headerExtra }: Props) {
+export function ChatView({ channel, title, icon, topic, lockedReason, canModerate, canPin, members, aside, intro, kind, focusMessageId, headerExtra, banner }: Props) {
   const { me, friends, setActiveChannel, markRead } = useNexus();
   const { appearance, update, plugin } = useAppearance();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -293,6 +295,7 @@ export function ChatView({ channel, title, icon, topic, lockedReason, canModerat
           )}
         </div>
       </header>
+      {banner}
 
       <div className="chat-body">
         <div className="chat-main">
